@@ -112,7 +112,7 @@ class StateSnapshotTest {
       for (c in json) {
         if (inString) {
           out.append(c)
-          if (escaped) escaped = false else if (c == '\') escaped = true else if (c == '"') inString = false
+          if (escaped) escaped = false else if (c == '\\') escaped = true else if (c == '"') inString = false
         } else if (c == '"') {
           inString = true
           out.append(c)
