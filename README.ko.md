@@ -10,8 +10,8 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/ouor/paseo/releases">
-    <img src="https://img.shields.io/github/v/release/ouor/paseo?include_prereleases&style=flat&logo=github" alt="Release">
+  <a href="https://github.com/ouor/paseo-phone/releases">
+    <img src="https://img.shields.io/github/v/release/ouor/paseo-phone?include_prereleases&style=flat&logo=github" alt="Release">
   </a>
   <a href="https://github.com/getpaseo/paseo">
     <img src="https://img.shields.io/badge/upstream-getpaseo%2Fpaseo-555?logo=github" alt="Upstream Paseo">
@@ -40,7 +40,7 @@ Paseo Phone은 안드로이드 폰 하나를 개발 머신으로 만듭니다. �
 
 ## 설치
 
-1. [Releases](https://github.com/ouor/paseo/releases)에서 `paseo-phone-arm64.apk`를 받으세요. 태그는 `phone-v<업스트림 버전>-<n>`입니다. 최신 릴리스는 `phone-v0.14.0-2`(arm64)입니다.
+1. [Releases](https://github.com/ouor/paseo-phone/releases)에서 `paseo-phone-arm64.apk`를 받으세요. 태그는 `phone-v<업스트림 버전>-<n>`입니다. 최신 릴리스는 `phone-v0.14.0-2`(arm64)입니다.
 2. 다른 키로 서명된 이전 빌드(초기 미서명/debug 빌드)가 있으면 먼저 삭제하세요. 그대로는 안드로이드가 업데이트를 거부합니다. 삭제하면 `/root` 아래 레포와 에이전트 로그인을 포함한 리눅스 환경이 지워집니다.
 3. APK를 설치하세요. 앱 이름은 "Paseo Phone"(`io.github.ouor.paseophone`)이고, 일반 Paseo 앱과 따로 설치됩니다.
 
