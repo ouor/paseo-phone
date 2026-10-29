@@ -14,6 +14,7 @@ fi
 
 dirty=""
 [ -z "$(git -C "$root" status --porcelain)" ] || dirty="-dirty"
+# phone-fork: EXPO_PUBLIC_LOCAL_DAEMON must match PhoneConstants DAEMON_HOST/DAEMON_PORT (architecture §7.5).
 export APP_VARIANT=phone EXPO_PUBLIC_LOCAL_DAEMON=127.0.0.1:6767 PASEO_WATCHDOG_BUILD=1
 export PASEO_DIAGNOSTIC_BUILD_TIME="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 export PASEO_DIAGNOSTIC_REVISION="$(git -C "$root" rev-parse --short HEAD)$dirty"
@@ -23,7 +24,8 @@ export PASEO_DIAGNOSTIC_REVISION="$(git -C "$root" rev-parse --short HEAD)$dirty
 (cd "$app" && npx expo prebuild --platform android --no-install --clean)
 # Gradle does not track Metro's environment flags; always regenerate the JS bundle.
 rm -rf "$app/android/app/build/generated/assets"
-(cd "$app/android" && ./gradlew assembleRelease --no-daemon --max-workers=2 \
+# Module unit tests run in the same Gradle call; a failing test means no APK (architecture §9).
+(cd "$app/android" && ./gradlew :paseo-phone-runtime:testReleaseUnitTest assembleRelease --no-daemon --max-workers=2 \
   -Dorg.gradle.parallel=false -PreactNativeArchitectures=arm64-v8a)
 
 mkdir -p "$root/artifacts"

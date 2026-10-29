@@ -12,8 +12,7 @@ const appVariant = process.env.APP_VARIANT ?? "production";
 const isFdroidBuild = process.env.PASEO_FDROID_BUILD === "1";
 const isWatchdogBuild = process.env.PASEO_WATCHDOG_BUILD === "1";
 const isProfileBuild = process.env.PASEO_PROFILE_BUILD === "1";
-// Paseo Phone fork: on-device Linux runtime build (docs/phone-dev-machine/architecture/architecture.md §6).
-const isPhoneBuild = appVariant === "phone";
+const isPhoneBuild = appVariant === "phone"; // phone-fork: docs/phone-dev-machine/architecture/architecture.md §6
 
 const buildProfile = isFdroidBuild
   ? {
@@ -94,6 +93,7 @@ const variants = {
       fallbackRelativePath: "./.secrets/GoogleService-Info.debug.plist",
     }),
   },
+  // phone-fork: on-device Linux runtime variant
   phone: {
     name: "Paseo Phone",
     packageId: "io.github.ouor.paseophone",
@@ -112,7 +112,7 @@ export default {
     version: nativeReleaseVersion.appVersion,
     orientation: "portrait",
     icon: "./assets/images/icon.png",
-    scheme: isPhoneBuild ? "paseo-phone" : "paseo",
+    scheme: isPhoneBuild ? "paseo-phone" : "paseo", // phone-fork: own deep-link scheme
     userInterfaceStyle: "automatic",
     newArchEnabled: true,
     ios: {
@@ -139,6 +139,8 @@ export default {
       usesCleartextTraffic: true,
       permissions: buildProfile.androidPermissions,
       package: variant.packageId,
+      // phone-fork: the rootfs holds SSH host keys and agent tokens; keep it out of backups.
+      ...(isPhoneBuild ? { allowBackup: false } : {}),
       versionCode: nativeReleaseVersion.androidVersionCode,
       ...(variant.googleServicesFile ? { googleServicesFile: variant.googleServicesFile } : {}),
     },
@@ -186,7 +188,7 @@ export default {
             kotlinVersion: "2.1.20",
             // Allow HTTP connections for local network hosts in release builds
             usesCleartextTraffic: true,
-            // proot binaries run from nativeLibraryDir, so they must be extracted from the APK.
+            // phone-fork: proot binaries run from nativeLibraryDir, so they must be extracted.
             ...(isPhoneBuild ? { useLegacyPackaging: true } : {}),
           },
         },
@@ -203,7 +205,7 @@ export default {
       fdroidBuild: isFdroidBuild,
       profileBuild: isProfileBuild,
       watchdogBuild: isWatchdogBuild,
-      phoneRuntime: isPhoneBuild,
+      phoneRuntime: isPhoneBuild, // phone-fork: read by modules/paseo-phone-runtime isPhoneRuntime
       diagnosticRevision: process.env.PASEO_DIAGNOSTIC_REVISION,
       diagnosticBuildTime: process.env.PASEO_DIAGNOSTIC_BUILD_TIME,
       router: {},
