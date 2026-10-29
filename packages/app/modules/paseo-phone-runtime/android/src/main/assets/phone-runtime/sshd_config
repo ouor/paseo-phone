@@ -1,0 +1,8 @@
+# Paseo Phone: installed as /etc/ssh/sshd_config.d/phone.conf by configure.sh (architecture §5.1).
+# Key login only. authorized_keys is managed by the app.
+Port 2222
+PasswordAuthentication no
+KbdInteractiveAuthentication no
+PermitRootLogin prohibit-password
+AllowTcpForwarding local
+X11Forwarding no
