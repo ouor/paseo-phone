@@ -5,7 +5,6 @@ import { StartupSplashScreen } from "@/screens/startup-splash-screen";
 import type { PhoneRuntimeState } from "../../modules/paseo-phone-runtime";
 import { registerPhoneTranslations } from "./i18n/register";
 import { LinuxSetupScreen, LinuxStartFailedScreen } from "./linux-setup-screen.android";
-import { LinuxStoppedCalloutSource } from "./linux-stopped-callout-source.android";
 import { isPhoneRuntime, usePhoneRuntimeState } from "./runtime.android";
 
 registerPhoneTranslations();
@@ -78,10 +77,5 @@ function ReadyGate({
     }
     return <StartupSplashScreen />;
   }
-  return (
-    <>
-      <LinuxStoppedCalloutSource state={state} />
-      {children}
-    </>
-  );
+  return children;
 }

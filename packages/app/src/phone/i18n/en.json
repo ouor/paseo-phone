@@ -128,7 +128,8 @@
           "confirmTitle": "Reinstall Linux?",
           "confirmMessage": "Kept: this host's registration, the SSH host key and authorized keys. Deleted: everything else in /root, including projects and installed agents. The exchange folder on the phone is kept.",
           "confirm": "Delete and reinstall",
-          "failed": "Unable to reinstall Linux"
+          "failed": "Unable to reinstall Linux",
+          "pending": "Reinstalling..."
         }
       },
       "remoteAccess": {
@@ -207,18 +208,6 @@
         },
         "mountFailed": "Unable to mount the exchange folder",
         "openFailed": "Unable to open the folder"
-      }
-    }
-  },
-  "sidebar": {
-    "callouts": {
-      "linuxStopped": {
-        "title": "Linux is stopped",
-        "crashedTitle": "Linux stopped unexpectedly",
-        "description": "Agents on this phone are offline",
-        "start": "Start",
-        "starting": "Starting...",
-        "details": "Details"
       }
     }
   }

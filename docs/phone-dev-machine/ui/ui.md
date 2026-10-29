@@ -15,7 +15,6 @@
 | `linux-section.android.tsx`                                              | 섹션 B                                                                                                            |
 | `remote-access-section.android.tsx`, `authorized-keys-sheet.android.tsx` | 섹션 C + 키 시트                                                                                                  |
 | `exchange-section.android.tsx`                                           | 섹션 D                                                                                                            |
-| `linux-stopped-callout-source.android.tsx`                               | 사이드바 콜아웃 G                                                                                                 |
 | `i18n/en.json`, `i18n/ko.json`, `i18n/register.ts`                       | 폰 전용 문구. 기존 i18next 인스턴스에 deep merge                                                                  |
 | `format.ts` (+ `format.test.ts`), `i18n/register.test.ts`                | 순수 문자열 함수와 테스트 (§5 편차 1)                                                                             |
 
@@ -48,7 +47,7 @@
 | 교환 폴더 열기 / Linux 경로 복사                                     | **Exchange folder**                                      | Host 페이지, Remote access 아래                            |
 | 저장소 권한 요청 / 권한 후 Linux 재시작                              | Exchange folder 카드 위 Alert                            | 해당 상태일 때만                                           |
 | Linux 다시 설치                                                      | **Reset Linux** 섹션                                     | Exchange folder 아래. 확인 후 화면 A로                     |
-| Linux 멈춤 알림 (Start / Details)                                    | 사이드바 콜아웃                                          | 이 세션에서 Linux가 멈추거나 죽으면 자동. 실행되면 사라짐  |
+| Linux 멈춤·비정상 종료 표시                                          | Host 페이지 Linux 행 배지와 오류 Alert, Linux 알림       | 사이드바 콜아웃은 없다(§5 편차 8)                          |
 | 알림 Stop → 확인 대화상자                                            | Linux 섹션 (`?confirmStop=1`)                            | 알림. `running`과 `starting`에서                           |
 | 알림 로그 열기 → 데몬 로그                                           | 로그 시트 (`?logs=daemon`)                               | 알림                                                       |
 
@@ -98,6 +97,7 @@
 5. Linux `starting` 중에도 Stop 버튼이 눌린다(코어 `stop()`이 시작을 취소한다, §7.2). `stopping` 중에만 비활성.
 6. 복사 확인은 업스트림 `toast.copied()`. `remoteAccess.copied`, `linuxSetup.logsCopied` 키는 만들지 않았다. "This device"(`settings.host.thisDevice`)도 architecture §4.2대로 쓰지 않는다.
 7. 추가 키: `linuxSetup.actions.startPrevious`, `settings.host.linux.{actions.restart, daemon.hint, phantom.*, notifications.*, logs.{modalTitle,empty,loadFailed,kinds.*}, restartFailed, settingFailed, reinstall.{sectionTitle,failed}}`, `settings.host.remoteAccess.{hostKey.*, noKeys.*, keys.{loadFailed,removeFailed}}`, `settings.host.exchange.{restartRequired.*, openFailed}`. `stopConfirm.message`는 복수형(`_one`/`_other`).
+8. "Linux is stopped" 사이드바 콜아웃을 지웠다(QA B2). 업스트림 `sidebar-callout-slot.native.tsx`가 `null`이라 네이티브에서는 그려지지 않고, 이 포크는 Android만 빌드하므로 한 번도 보이지 않는다. 네이티브에 이미 그려지는 공용 배너 자리가 없어서 본체를 고치지 않고는 옮길 곳이 없다. 멈춤·비정상 종료는 Host 페이지(Linux 행 배지, 오류 Alert)와 Linux 알림으로 알린다. 호스트 목록의 오프라인 표시도 같은 신호다.
 
 ## 6. 코어에 요청 (팀장 경유)
 
@@ -113,7 +113,8 @@
 - 알림 Stop → 확인 대화상자, "Tap to open logs" → 데몬 로그 시트 (코어 요청 1 반영 후).
 - 키 붙여넣기: 정상, 중복, 잘못된 키, 개인 키(입력이 즉시 비워지는지).
 - 저장소 권한 허용 → `restart-required` Alert → Restart Linux → `mounted`.
-- Linux Stop 후 사이드바 콜아웃, Start 시 "Starting..." 비활성, 실행되면 사라짐.
+- Reset Linux 확인 직후 버튼이 "다시 설치하는 중..."으로 비활성, 설치 화면이 뜰 때까지 유지.
+- 로그 시트와 설치 실패 로그 박스가 마지막 줄에서 열리는지. 한국어에서 키 행이 "키 1개"인지.
 - 한국어 기기 언어에서 폰 문구와 본체 문구가 둘 다 한국어인지.
 - 첫 시작 실패(예: 6767 점유로 `start-failed`): Welcome이 아니라 시작 실패 화면, 데몬 로그, Linux 재시작 → 스플래시 → 호스트 진입, "다른 호스트로 계속" → Welcome.
 - `checking`이 5초를 넘을 때 Start·로그 보기(네이티브 결함 재현이 어려우면 코드 리뷰로 대체).

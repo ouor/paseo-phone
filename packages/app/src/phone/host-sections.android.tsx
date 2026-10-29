@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useCallback, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Alert as NativeAlert } from "react-native";
 import { SettingsCard, SettingsRow, SettingsSection } from "@/components/settings";
@@ -35,6 +35,8 @@ function ThisDeviceSections({ serverId }: { serverId: string }) {
 
 function ReinstallSection() {
   const { t } = useTranslation();
+  // Stays set until the state leaves `ready` and this section unmounts; a second tap would be `busy`.
+  const [pending, setPending] = useState(false);
   const handleReinstall = useCallback(async () => {
     const confirmed = await confirmDialog({
       title: t("settings.host.linux.reinstall.confirmTitle"),
@@ -44,10 +46,12 @@ function ReinstallSection() {
       destructive: true,
     });
     if (!confirmed) return;
+    setPending(true);
     // The runtime switches to `setup` and PhoneRuntimeGate puts the setup screen up.
-    reinstall().catch((error: Error) =>
-      NativeAlert.alert(t("settings.host.linux.reinstall.failed"), error.message),
-    );
+    reinstall().catch((error: Error) => {
+      setPending(false);
+      NativeAlert.alert(t("settings.host.linux.reinstall.failed"), error.message);
+    });
   }, [t]);
 
   return (
@@ -57,8 +61,12 @@ function ReinstallSection() {
           label={t("settings.host.linux.reinstall.title")}
           hint={t("settings.host.linux.reinstall.hint")}
         >
-          <Button variant="outline" onPress={handleReinstall}>
-            {t("settings.host.linux.reinstall.action")}
+          <Button variant="outline" onPress={handleReinstall} disabled={pending}>
+            {t(
+              pending
+                ? "settings.host.linux.reinstall.pending"
+                : "settings.host.linux.reinstall.action",
+            )}
           </Button>
         </SettingsRow>
       </SettingsCard>

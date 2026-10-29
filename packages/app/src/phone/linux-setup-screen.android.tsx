@@ -1,6 +1,6 @@
 import * as Clipboard from "expo-clipboard";
 import { Check, Circle, Copy, FileText, Play, RotateCw, X } from "lucide-react-native";
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Alert as NativeAlert, ScrollView, Text, View } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
@@ -288,6 +288,9 @@ function FailureDetails({
   const { t } = useTranslation();
   const toast = useToast();
   const { logs, text } = usePhoneLogText(logKind, message);
+  // The failure is at the end of the log: show the newest lines first.
+  const logsRef = useRef<ScrollView>(null);
+  const scrollToEnd = useCallback(() => logsRef.current?.scrollToEnd({ animated: false }), []);
 
   const handleCopyLogs = useCallback(() => {
     const payload = logs ? `${logs.path}\n\n${message}\n\n${logs.contents}` : message;
@@ -301,7 +304,12 @@ function FailureDetails({
         {message}
       </Text>
       <View style={styles.logsContainer}>
-        <ScrollView contentContainerStyle={styles.logsContent}>
+        <ScrollView
+          ref={logsRef}
+          contentContainerStyle={styles.logsContent}
+          onContentSizeChange={scrollToEnd}
+          nestedScrollEnabled
+        >
           <Text dataSet={CODE_SURFACE_DATASET} selectable style={styles.logsText}>
             {text}
           </Text>

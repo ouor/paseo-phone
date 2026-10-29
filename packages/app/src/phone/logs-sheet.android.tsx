@@ -1,10 +1,11 @@
 import * as Clipboard from "expo-clipboard";
-import { useCallback, useMemo } from "react";
+import { useCallback, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
-import { Text, View } from "react-native";
+import { Text, View, type ScrollView as NativeScrollView } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { AdaptiveModalSheet, type SheetHeader } from "@/components/adaptive-modal-sheet";
 import { Button } from "@/components/ui/button";
+import { ScrollView } from "@/components/ui/scroll-view";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { useToast } from "@/contexts/toast-api-context";
 import { useFetchQuery } from "@/data/query";
@@ -53,6 +54,10 @@ export function PhoneLogsSheet({
     contents = t("settings.host.linux.logs.loadFailed", { message: logsQuery.error.message });
   } else if (logsQuery.data?.contents) contents = logsQuery.data.contents;
 
+  // Logs are read from the bottom: open at the newest lines.
+  const scrollRef = useRef<NativeScrollView>(null);
+  const scrollToEnd = useCallback(() => scrollRef.current?.scrollToEnd({ animated: false }), []);
+
   const handleCopy = useCallback(() => {
     const logs = logsQuery.data;
     if (!logs) return;
@@ -65,22 +70,25 @@ export function PhoneLogsSheet({
       onClose={onClose}
       header={header}
       snapPoints={LOGS_SNAP_POINTS}
+      scrollable={false}
       testID="phone-linux-logs-sheet"
     >
-      <View style={styles.sheetBody}>
-        <SegmentedControl options={options} value={kind} onValueChange={onKindChange} size="sm" />
-        <Text style={settingsStyles.rowHint} selectable>
-          {logsQuery.data?.path ?? " "}
-        </Text>
-        <Text style={styles.logOutput} selectable dataSet={CODE_SURFACE_DATASET}>
-          {contents}
-        </Text>
-        <View style={styles.sheetActions}>
-          <Button variant="outline" size="sm" onPress={handleCopy} disabled={!logsQuery.data}>
-            {t("common.actions.copy")}
-          </Button>
+      <ScrollView ref={scrollRef} onContentSizeChange={scrollToEnd} nestedScrollEnabled>
+        <View style={styles.sheetBody}>
+          <SegmentedControl options={options} value={kind} onValueChange={onKindChange} size="sm" />
+          <Text style={settingsStyles.rowHint} selectable>
+            {logsQuery.data?.path ?? " "}
+          </Text>
+          <Text style={styles.logOutput} selectable dataSet={CODE_SURFACE_DATASET}>
+            {contents}
+          </Text>
+          <View style={styles.sheetActions}>
+            <Button variant="outline" size="sm" onPress={handleCopy} disabled={!logsQuery.data}>
+              {t("common.actions.copy")}
+            </Button>
+          </View>
         </View>
-      </View>
+      </ScrollView>
     </AdaptiveModalSheet>
   );
 }
