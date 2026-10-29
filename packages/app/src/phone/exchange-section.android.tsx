@@ -10,9 +10,9 @@ import * as Clipboard from "expo-clipboard";
 import {
   openExchangeFolder,
   requestStoragePermission,
+  restartLinux,
   type PhoneRuntimeState,
 } from "../../modules/paseo-phone-runtime";
-import { restartLinux } from "./runtime.android";
 
 type ReadyState = Extract<PhoneRuntimeState, { status: "ready" }>;
 
@@ -23,6 +23,7 @@ export function ExchangeSection({ state }: { state: ReadyState }) {
   const toast = useToast();
   const exchange = state.exchange;
   const [restarting, setRestarting] = useState(false);
+  const linuxBusy = state.linux.state === "starting" || state.linux.state === "stopping";
 
   const handleOpen = useCallback(() => {
     openExchangeFolder().catch((error: Error) =>
@@ -66,7 +67,12 @@ export function ExchangeSection({ state }: { state: ReadyState }) {
         title={t("settings.host.exchange.restartRequired.title")}
         description={t("settings.host.exchange.restartRequired.description")}
       >
-        <Button variant="outline" size="sm" onPress={handleRestart} disabled={restarting}>
+        <Button
+          variant="outline"
+          size="sm"
+          onPress={handleRestart}
+          disabled={restarting || linuxBusy}
+        >
           {t("settings.host.exchange.restartRequired.action")}
         </Button>
       </Alert>
