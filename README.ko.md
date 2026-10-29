@@ -40,7 +40,7 @@ Paseo Phone은 안드로이드 폰 하나를 개발 머신으로 만듭니다. �
 
 ## 설치
 
-1. [Releases](https://github.com/ouor/paseo/releases)에서 `paseo-phone-arm64.apk`를 받으세요. 태그는 `phone-v<업스트림 버전>-<n>`입니다. 첫 릴리스는 `phone-v0.14.0-1`(arm64, 프리릴리스)입니다.
+1. [Releases](https://github.com/ouor/paseo/releases)에서 `paseo-phone-arm64.apk`를 받으세요. 태그는 `phone-v<업스트림 버전>-<n>`입니다. 최신 릴리스는 `phone-v0.14.0-2`(arm64)입니다.
 2. 다른 키로 서명된 이전 빌드(초기 미서명/debug 빌드)가 있으면 먼저 삭제하세요. 그대로는 안드로이드가 업데이트를 거부합니다. 삭제하면 `/root` 아래 레포와 에이전트 로그인을 포함한 리눅스 환경이 지워집니다.
 3. APK를 설치하세요. 앱 이름은 "Paseo Phone"(`io.github.ouor.paseophone`)이고, 일반 Paseo 앱과 따로 설치됩니다.
 
@@ -105,7 +105,7 @@ bash scripts/phone/build-apk.sh [--skip-tests] [--install] [--device <serial>]
 
 ## 업스트림 따라가기
 
-이 포크는 업스트림 Paseo 릴리스를 따라가고, 업스트림으로 다시 합치지 않습니다. 새 업스트림 릴리스로 옮기려면 그 태그를 머지하고 [architecture §4.3](docs/phone-dev-machine/architecture/architecture.md)의 머지 체크리스트를 확인하세요. 포크가 업스트림 파일에 넣은 줄에는 `phone-fork:` 표시가 있습니다. `rg -n "phone-fork:" packages/app scripts`로 확인하세요.
+이 포크는 업스트림 Paseo 릴리스를 따라가고, 업스트림으로 다시 합치지 않습니다. 새 업스트림 릴리스로 옮기려면 [업스트림 반영 가이드](docs/phone-dev-machine/upstream-sync.md)를 따르세요. [architecture §4.3](docs/phone-dev-machine/architecture/architecture.md)의 머지 체크리스트도 이 가이드에서 다룹니다. 포크가 업스트림 파일에 넣은 줄에는 `phone-fork:` 표시가 있습니다. `rg -n "phone-fork:" packages/app scripts`로 확인하세요.
 
 데몬은 `packages/server/package.json` 버전의 공개 `@getpaseo/cli`이고, Node.js는 `.tool-versions`를 따릅니다. 머지 후 앱이 다음 시작 때 폰에서 둘을 업데이트합니다. 에이전트 CLI와 apt 패키지는 자동으로 업그레이드하지 않습니다.
 

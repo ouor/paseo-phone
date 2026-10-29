@@ -40,7 +40,7 @@ The app detects both settings and warns you. It does not change them.
 
 ## Install
 
-1. Download `paseo-phone-arm64.apk` from [Releases](https://github.com/ouor/paseo/releases). Tags are `phone-v<upstream version>-<n>`. The first is `phone-v0.14.0-1` (arm64, pre-release).
+1. Download `paseo-phone-arm64.apk` from [Releases](https://github.com/ouor/paseo/releases). Tags are `phone-v<upstream version>-<n>`. The latest is `phone-v0.14.0-2` (arm64).
 2. If you have an older build signed with a different key (the early unsigned/debug builds), uninstall it first. Android refuses the update otherwise. Uninstalling deletes the Linux environment, including repos and agent logins under `/root`.
 3. Install the APK. The app is "Paseo Phone" (`io.github.ouor.paseophone`) and installs next to the regular Paseo app.
 
@@ -105,7 +105,7 @@ The signing files (`signing/release.p12`, `signing/keystore.properties`) are the
 
 ## Staying current with upstream
 
-This fork tracks upstream Paseo releases and is never merged back. To move to a new upstream release, merge its tag and walk the merge checklist in [architecture §4.3](docs/phone-dev-machine/architecture/architecture.md). The fork's edits to upstream files are marked `phone-fork:`; check them with `rg -n "phone-fork:" packages/app scripts`.
+This fork tracks upstream Paseo releases and is never merged back. To move to a new upstream release, follow [the upstream sync guide](docs/phone-dev-machine/upstream-sync.md); it walks the merge checklist in [architecture §4.3](docs/phone-dev-machine/architecture/architecture.md). The fork's edits to upstream files are marked `phone-fork:`; check them with `rg -n "phone-fork:" packages/app scripts`.
 
 The daemon is the public `@getpaseo/cli` at the version in `packages/server/package.json`, and Node.js follows `.tool-versions`. After a merge, the app updates both on the phone at the next start. Agent CLIs and apt packages are not upgraded automatically.
 
