@@ -169,6 +169,7 @@ ready: stopped ─start─▶ starting ─데몬 HTTP 응답─▶ running ─st
 | running + 데몬 not-responding    | Daemon is not responding / Tap to open logs                | 없음. 쓸어 지울 수 있음                    | 탭 `…/settings/hosts/<serverId>?logs=daemon`, **Restart** → 앱을 열지 않고 `restartDaemon()`         |
 | stopped, error(restart-limit 등) | 알림 없음(서비스 종료)                                     |                                            |                                                                                                      |
 
+- 알림 권한이 없을 때 서비스가 시작되면 Android가 알림을 버린다. 서비스가 마지막 알림과 표시 여부를 기억하고, 컨트롤러가 상태를 발행할 때마다(앱 포그라운드 복귀, 30초 주기 포함) 권한이 새로 생겼으면 `startForeground`로 다시 올린다.
 - `serverId`를 아직 모르면 경로 부분 없이 `paseo-phone://` (+쿼리)로 연다.
 - UI가 처리할 쿼리: `confirmStop=1`(Linux 섹션의 Stop 확인 대화상자를 띄움), `logs=daemon`(데몬 로그를 보여줌). expo-router가 받는다.
 

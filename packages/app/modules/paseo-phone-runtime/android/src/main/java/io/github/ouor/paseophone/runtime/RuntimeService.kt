@@ -11,6 +11,7 @@ import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
+import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
 import androidx.core.content.IntentCompat
@@ -34,6 +35,11 @@ class RuntimeService : Service() {
   private var wakeLock: PowerManager.WakeLock? = null
   private var wifiLock: WifiManager.WifiLock? = null
 
+  // Last notification and whether it could actually be shown; Android drops it while POST_NOTIFICATIONS is denied.
+  private var lastNotification: Notification? = null
+  private var lastShown = false
+  private var foreground = false
+
   override fun onBind(intent: Intent?): IBinder? = null
 
   override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -50,8 +56,7 @@ class RuntimeService : Service() {
       stopSelf()
       return START_NOT_STICKY
     }
-    val type = if (Build.VERSION.SDK_INT >= 34) ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE else 0
-    ServiceCompat.startForeground(this, RuntimeNotification.NOTIFICATION_ID, notification, type)
+    enterForeground(notification)
     instance = this
     started.complete(this)
     // Not sticky: after the process dies the next app launch restarts from state.json (`desired`).
@@ -71,8 +76,27 @@ class RuntimeService : Service() {
   }
 
   fun show(notification: Notification) {
+    lastNotification = notification
+    lastShown = notificationsAllowed()
     getSystemService(NotificationManager::class.java)?.notify(RuntimeNotification.NOTIFICATION_ID, notification)
   }
+
+  /** Re-posts the current notification once notifications become allowed after it was dropped. Cheap when nothing changed. */
+  fun repostIfAllowed() {
+    val notification = lastNotification ?: return
+    if (!foreground || lastShown || !notificationsAllowed()) return
+    enterForeground(notification)
+  }
+
+  private fun enterForeground(notification: Notification) {
+    val type = if (Build.VERSION.SDK_INT >= 34) ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE else 0
+    ServiceCompat.startForeground(this, RuntimeNotification.NOTIFICATION_ID, notification, type)
+    foreground = true
+    lastNotification = notification
+    lastShown = notificationsAllowed()
+  }
+
+  private fun notificationsAllowed() = NotificationManagerCompat.from(this).areNotificationsEnabled()
 
   fun track(key: String, process: ProotProcess) {
     processes[key] = process
@@ -107,6 +131,7 @@ class RuntimeService : Service() {
   /** Leaves the foreground and stops. [keepNotification] leaves the last notification posted (setup failed). */
   fun shutdown(keepNotification: Boolean) {
     val mode = if (keepNotification) ServiceCompat.STOP_FOREGROUND_DETACH else ServiceCompat.STOP_FOREGROUND_REMOVE
+    foreground = false
     ServiceCompat.stopForeground(this, mode)
     stopSelf()
   }

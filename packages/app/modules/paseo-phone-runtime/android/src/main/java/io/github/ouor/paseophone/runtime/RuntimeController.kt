@@ -759,6 +759,8 @@ object RuntimeController : RuntimeService.Listener {
     } else if (service == null) {
       lastView = null
     }
+    // publish() runs on app foreground, device-check refresh and the 30 s tick, so a late permission grant shows up.
+    service?.repostIfAllowed()
   }
 
   private fun buildNotification(view: RuntimeNotification.View) =
