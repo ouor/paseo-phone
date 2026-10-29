@@ -1,10 +1,10 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { useLatchedBoolean } from "@/hooks/use-latched-boolean";
-import { useHostRuntimeIsConnected } from "@/runtime/host-runtime";
+import { useHostRegistryLoaded, useHostRuntimeIsConnected, useHosts } from "@/runtime/host-runtime";
 import { StartupSplashScreen } from "@/screens/startup-splash-screen";
 import type { PhoneRuntimeState } from "../../modules/paseo-phone-runtime";
 import { registerPhoneTranslations } from "./i18n/register";
-import { LinuxSetupScreen } from "./linux-setup-screen.android";
+import { LinuxSetupScreen, LinuxStartFailedScreen } from "./linux-setup-screen.android";
 import { LinuxStoppedCalloutSource } from "./linux-stopped-callout-source.android";
 import { isPhoneRuntime, usePhoneRuntimeState } from "./runtime.android";
 
@@ -16,7 +16,8 @@ const HOST_WAIT_TIMEOUT_MS = 60_000;
 /**
  * Wraps AppShell (architecture §7.3). While Linux is being checked, installed or updated, the setup
  * screen replaces the whole app so the router never picks Welcome or a host. After that it holds
- * the splash until this phone's host is online, once, then gets out of the way.
+ * the splash until this phone's host is online, once, then gets out of the way. If Linux fails to
+ * start before the host was ever registered, it shows the start-failed screen instead.
  */
 export function PhoneRuntimeGate({ children }: { children: ReactNode }) {
   if (!isPhoneRuntime) {
@@ -45,17 +46,36 @@ function ReadyGate({
 }) {
   const serverId = state.daemon.serverId;
   const hostOnline = useHostRuntimeIsConnected(serverId ?? "");
-  const linuxComingUp = state.linux.state === "starting" || state.linux.state === "running";
+  const hosts = useHosts();
+  const registryLoaded = useHostRegistryLoaded();
+  const registered = serverId !== null && hosts.some((host) => host.serverId === serverId);
+  const linux = state.linux;
+  const linuxComingUp = linux.state === "starting" || linux.state === "running";
+  // First start after install failed: no host was registered, so AppShell would land on Welcome.
+  const firstStartFailed = linux.state === "error" && registryLoaded && !registered;
   const [timedOut, setTimedOut] = useState(false);
-  const released = useLatchedBoolean(!linuxComingUp || hostOnline || timedOut);
+  const [continued, setContinued] = useState(false);
+  const released = useLatchedBoolean(
+    hostOnline ||
+      timedOut ||
+      continued ||
+      linux.state === "stopped" ||
+      linux.state === "stopping" ||
+      (linux.state === "error" && registryLoaded && registered),
+  );
 
   useEffect(() => {
-    if (released) return;
+    if (released || !linuxComingUp) return;
     const handle = setTimeout(() => setTimedOut(true), HOST_WAIT_TIMEOUT_MS);
     return () => clearTimeout(handle);
-  }, [released]);
+  }, [linuxComingUp, released]);
+
+  const handleContinue = useCallback(() => setContinued(true), []);
 
   if (!released) {
+    if (firstStartFailed && linux.state === "error") {
+      return <LinuxStartFailedScreen message={linux.message} onContinue={handleContinue} />;
+    }
     return <StartupSplashScreen />;
   }
   return (

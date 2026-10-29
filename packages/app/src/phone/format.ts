@@ -47,12 +47,6 @@ export function formatMegabytes(bytes: number): string {
   return `${Math.round(bytes / 1_000_000)} MB`;
 }
 
-/** Core reports no-space as `free 2.1 GB, need 4.0 GB` (docs/phone-dev-machine/core/core-linux.md). */
-export function parseNoSpaceMessage(message: string): { free: string; needed: string } | null {
-  const match = /free\s+([\d.]+\s*[KMGT]?B)\s*,\s*need\s+([\d.]+\s*[KMGT]?B)/i.exec(message);
-  return match ? { free: match[1], needed: match[2] } : null;
-}
-
 export interface PhoneNotificationIntent {
   confirmStop: boolean;
   logs: LogKind | null;
@@ -60,15 +54,20 @@ export interface PhoneNotificationIntent {
 
 const LOG_KINDS: readonly LogKind[] = ["daemon", "ssh", "setup"];
 
-/** Reads the query the Linux notification appends: `?confirmStop=1`, `?logs=daemon`. */
-export function readPhoneNotificationIntent(params: {
-  confirmStop?: string | string[];
-  logs?: string | string[];
-}): PhoneNotificationIntent {
-  const first = (value: string | string[] | undefined) => (Array.isArray(value) ? value[0] : value);
-  const logs = first(params.logs);
+type QueryValue = string | string[] | undefined;
+
+/**
+ * Reads the query the Linux notification appends: `?confirmStop=1`, `?logs=daemon`. The caller
+ * looks the values up by `PHONE_NOTIFICATION_QUERY`, so this file stays free of native imports.
+ */
+export function readPhoneNotificationIntent(
+  confirmStop: QueryValue,
+  logs: QueryValue,
+): PhoneNotificationIntent {
+  const first = (value: QueryValue) => (Array.isArray(value) ? value[0] : value);
+  const logKind = first(logs);
   return {
-    confirmStop: first(params.confirmStop) === "1",
-    logs: LOG_KINDS.find((kind) => kind === logs) ?? null,
+    confirmStop: first(confirmStop) === "1",
+    logs: LOG_KINDS.find((kind) => kind === logKind) ?? null,
   };
 }

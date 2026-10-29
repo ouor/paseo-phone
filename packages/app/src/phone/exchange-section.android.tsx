@@ -16,8 +16,6 @@ import {
 
 type ReadyState = Extract<PhoneRuntimeState, { status: "ready" }>;
 
-const LINUX_PATH_LABEL = "~/exchange";
-
 export function ExchangeSection({ state }: { state: ReadyState }) {
   const { t } = useTranslation();
   const toast = useToast();
@@ -92,12 +90,12 @@ export function ExchangeSection({ state }: { state: ReadyState }) {
     () =>
       mounted ? (
         <Text style={styles.code} selectable>
-          {LINUX_PATH_LABEL}
+          {exchange.linuxPath}
         </Text>
       ) : (
         t("settings.host.exchange.linux.notMounted")
       ),
-    [mounted, t],
+    [exchange.linuxPath, mounted, t],
   );
 
   return (

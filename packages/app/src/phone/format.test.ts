@@ -4,7 +4,6 @@ import {
   buildSshCommand,
   buildSshConfig,
   formatMegabytes,
-  parseNoSpaceMessage,
   pickAddress,
   readPhoneNotificationIntent,
   toSshHostAlias,
@@ -40,30 +39,25 @@ describe("phone setup strings", () => {
     expect(formatMegabytes(74_400_000)).toBe("74 MB");
     expect(formatMegabytes(2_100_000_000)).toBe("2.1 GB");
   });
-
-  it("parses the core no-space message", () => {
-    expect(parseNoSpaceMessage("free 2.1 GB, need 4.0 GB")).toEqual({
-      free: "2.1 GB",
-      needed: "4.0 GB",
-    });
-    expect(parseNoSpaceMessage("ENOSPC: No space left on device")).toBeNull();
-  });
 });
 
 describe("readPhoneNotificationIntent", () => {
   it("reads confirmStop and logs from the deep-link query", () => {
-    expect(readPhoneNotificationIntent({ confirmStop: "1" })).toEqual({
+    expect(readPhoneNotificationIntent("1", undefined)).toEqual({
       confirmStop: true,
       logs: null,
     });
-    expect(readPhoneNotificationIntent({ logs: "daemon" })).toEqual({
+    expect(readPhoneNotificationIntent(undefined, "daemon")).toEqual({
       confirmStop: false,
       logs: "daemon",
     });
-    expect(readPhoneNotificationIntent({ confirmStop: ["1"], logs: "bogus" })).toEqual({
+    expect(readPhoneNotificationIntent(["1"], "bogus")).toEqual({
       confirmStop: true,
       logs: null,
     });
-    expect(readPhoneNotificationIntent({})).toEqual({ confirmStop: false, logs: null });
+    expect(readPhoneNotificationIntent(undefined, undefined)).toEqual({
+      confirmStop: false,
+      logs: null,
+    });
   });
 });

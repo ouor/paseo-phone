@@ -1,6 +1,6 @@
 import * as Clipboard from "expo-clipboard";
-import { Check, Circle, Copy, RotateCw, X } from "lucide-react-native";
-import { useCallback, useState } from "react";
+import { Check, Circle, Copy, FileText, Play, RotateCw, X } from "lucide-react-native";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Alert as NativeAlert, ScrollView, Text, View } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
@@ -17,19 +17,25 @@ import type { Theme } from "@/styles/theme";
 import { UsageMeter } from "@/usage/meter";
 import {
   getLogs,
+  restartLinux,
   retrySetup,
+  start,
   startPrevious,
+  type LogKind,
   type PhoneRuntimeState,
   type SetupProgress,
   type SetupStep,
 } from "../../modules/paseo-phone-runtime";
-import { formatMegabytes, parseNoSpaceMessage } from "./format";
+import { formatMegabytes } from "./format";
+import { PhoneLogsSheet } from "./logs-sheet.android";
 
 type SetupState = Extract<PhoneRuntimeState, { status: "setup" | "setup-failed" }>;
+type SetupFailedState = Extract<SetupState, { status: "setup-failed" }>;
 export type LinuxSetupState = Extract<
   PhoneRuntimeState,
   { status: "checking" | "setup" | "setup-failed" }
 >;
+type TFn = ReturnType<typeof useTranslation>["t"];
 
 const STEPS: readonly SetupStep[] = [
   "download",
@@ -40,6 +46,8 @@ const STEPS: readonly SetupStep[] = [
   "start",
 ];
 const UPDATE_FIRST_STEP = STEPS.indexOf("paseo");
+// `checking` lasts a few hundred ms of disk reads; past this, offer a way out (architecture §7.3).
+const CHECKING_ESCAPE_MS = 5_000;
 
 type StepStatus = "done" | "active" | "failed" | "pending";
 
@@ -59,12 +67,102 @@ const ThemedPending = withUnistyles(Circle, mutedIcon);
 const ThemedSpinner = withUnistyles(LoadingSpinner);
 const spinnerColor = (theme: Theme) => ({ color: theme.colors.foregroundMuted });
 
+function reportFailure(title: string) {
+  return (error: Error) => NativeAlert.alert(title, error.message);
+}
+
 /** Covers app start while the runtime checks, installs, updates, or failed to install Linux. */
 export function LinuxSetupScreen({ state }: { state: LinuxSetupState }) {
   if (state.status === "checking") {
-    return <StartupSplashScreen />;
+    return <CheckingScreen />;
   }
   return <SetupProgressScreen state={state} />;
+}
+
+/** Logo, title and description over the screen's content. Same frame for every setup state. */
+function SetupFrame({
+  title,
+  description,
+  children,
+}: {
+  title: string;
+  description: string;
+  children: ReactNode;
+}) {
+  return (
+    <View style={styles.screen} testID="phone-linux-setup">
+      <ScrollView contentContainerStyle={styles.scrollContent}>
+        <View style={styles.content}>
+          <View style={styles.header}>
+            <PaseoLogo size={64} />
+            <Text style={styles.title}>{title}</Text>
+            <Text style={styles.description}>{description}</Text>
+          </View>
+          {children}
+        </View>
+      </ScrollView>
+    </View>
+  );
+}
+
+function CheckingScreen() {
+  const { t } = useTranslation();
+  const [slow, setSlow] = useState(false);
+  const [logsKind, setLogsKind] = useState<LogKind>("setup");
+  const [logsOpen, setLogsOpen] = useState(false);
+
+  useEffect(() => {
+    const handle = setTimeout(() => setSlow(true), CHECKING_ESCAPE_MS);
+    return () => clearTimeout(handle);
+  }, []);
+
+  const handleStart = useCallback(() => {
+    start().catch(reportFailure(t("settings.host.linux.startFailed")));
+  }, [t]);
+  const handleOpenLogs = useCallback(() => setLogsOpen(true), []);
+  const handleCloseLogs = useCallback(() => setLogsOpen(false), []);
+
+  if (!slow) {
+    return <StartupSplashScreen />;
+  }
+  return (
+    <SetupFrame
+      title={t("linuxSetup.checkingSlow.title")}
+      description={t("linuxSetup.checkingSlow.description")}
+    >
+      <View style={styles.actionRow}>
+        <Button variant="secondary" leftIcon={FileText} onPress={handleOpenLogs}>
+          {t("linuxSetup.checkingSlow.logs")}
+        </Button>
+        <Button variant="default" leftIcon={Play} onPress={handleStart}>
+          {t("linuxSetup.checkingSlow.start")}
+        </Button>
+      </View>
+      <PhoneLogsSheet
+        visible={logsOpen}
+        kind={logsKind}
+        onKindChange={setLogsKind}
+        onClose={handleCloseLogs}
+      />
+    </SetupFrame>
+  );
+}
+
+function failureCopy(state: SetupFailedState, t: TFn): { title: string; description: string } {
+  const step = t(`linuxSetup.steps.${state.step}`);
+  if (state.code === "cancelled") {
+    return {
+      title: t("linuxSetup.cancelledTitle"),
+      description: t("linuxSetup.cancelledDescription", { step }),
+    };
+  }
+  const description = state.space
+    ? t("linuxSetup.noSpace", {
+        free: formatMegabytes(state.space.freeBytes),
+        needed: formatMegabytes(state.space.neededBytes),
+      })
+    : t("linuxSetup.failedDescription", { step });
+  return { title: t("linuxSetup.failedTitle"), description };
 }
 
 function SetupProgressScreen({ state }: { state: SetupState }) {
@@ -78,55 +176,40 @@ function SetupProgressScreen({ state }: { state: SetupState }) {
   );
   if (stepIndex < firstStep) setFirstStep(stepIndex);
 
-  const stepLabel = t(`linuxSetup.steps.${state.step}`);
   let title = t(state.mode === "install" ? "linuxSetup.installTitle" : "linuxSetup.updateTitle");
   let description =
     state.status === "setup" && state.mode === "update"
       ? t("linuxSetup.updateDescription", { version: state.targetVersion })
       : t("linuxSetup.installDescription");
-  if (failed) {
-    title = t("linuxSetup.failedTitle");
-    const space = state.code === "no-space" ? parseNoSpaceMessage(state.message) : null;
-    description = space
-      ? t("linuxSetup.noSpace", space)
-      : t("linuxSetup.failedDescription", { step: stepLabel });
+  if (state.status === "setup-failed") {
+    ({ title, description } = failureCopy(state, t));
   }
 
   return (
-    <View style={styles.screen} testID="phone-linux-setup">
-      <ScrollView contentContainerStyle={styles.scrollContent}>
-        <View style={styles.content}>
-          <View style={styles.header}>
-            <PaseoLogo size={64} />
-            <Text style={styles.title}>{title}</Text>
-            <Text style={styles.description}>{description}</Text>
-          </View>
+    <SetupFrame title={title} description={description}>
+      <SettingsCard testID="phone-linux-setup-steps">
+        {STEPS.slice(firstStep).map((step, offset) => {
+          const index = firstStep + offset;
+          let status: StepStatus = "pending";
+          if (index < stepIndex) status = "done";
+          else if (index === stepIndex) status = failed ? "failed" : "active";
+          return (
+            <SetupStepRow
+              key={step}
+              label={t(`linuxSetup.steps.${step}`)}
+              status={status}
+              progress={status === "active" && state.status === "setup" ? state.progress : null}
+            />
+          );
+        })}
+      </SettingsCard>
 
-          <SettingsCard testID="phone-linux-setup-steps">
-            {STEPS.slice(firstStep).map((step, offset) => {
-              const index = firstStep + offset;
-              let status: StepStatus = "pending";
-              if (index < stepIndex) status = "done";
-              else if (index === stepIndex) status = failed ? "failed" : "active";
-              return (
-                <SetupStepRow
-                  key={step}
-                  label={t(`linuxSetup.steps.${step}`)}
-                  status={status}
-                  progress={status === "active" && state.status === "setup" ? state.progress : null}
-                />
-              );
-            })}
-          </SettingsCard>
-
-          {failed ? (
-            <SetupFailure state={state} />
-          ) : (
-            <Text style={styles.hint}>{t("linuxSetup.backgroundHint")}</Text>
-          )}
-        </View>
-      </ScrollView>
-    </View>
+      {state.status === "setup-failed" ? (
+        <SetupFailure state={state} />
+      ) : (
+        <Text style={styles.hint}>{t("linuxSetup.backgroundHint")}</Text>
+      )}
+    </SetupFrame>
   );
 }
 
@@ -174,51 +257,53 @@ function SetupStepRow({
   );
 }
 
-function SetupFailure({ state }: { state: Extract<SetupState, { status: "setup-failed" }> }) {
+function usePhoneLogText(kind: LogKind, refreshKey: string) {
   const { t } = useTranslation();
-  const toast = useToast();
-  const logsQuery = useFetchQuery({
-    queryKey: ["phone-runtime-logs", "setup", state.step, state.message],
-    queryFn: () => getLogs("setup"),
+  const query = useFetchQuery({
+    queryKey: ["phone-runtime-logs", kind, refreshKey],
+    queryFn: () => getLogs(kind),
     dataShape: "value",
     staleTimeMs: 0,
     retry: false,
   });
+  let text = t("linuxSetup.logs.empty");
+  if (query.isPending) text = t("linuxSetup.logs.loading");
+  else if (query.error) text = t("linuxSetup.logs.loadFailed", { message: query.error.message });
+  else if (query.data?.contents) text = query.data.contents;
+  return { logs: query.data, text };
+}
 
-  let logsText = t("startup.logs.unavailable");
-  if (logsQuery.isPending) logsText = t("startup.logs.loading");
-  else if (logsQuery.data?.contents) logsText = logsQuery.data.contents;
+/** Error message, log tail and actions. Shared by setup failure and the start-failed screen. */
+function FailureDetails({
+  message,
+  logKind,
+  offline,
+  children,
+}: {
+  message: string;
+  logKind: LogKind;
+  offline: boolean;
+  children: ReactNode;
+}) {
+  const { t } = useTranslation();
+  const toast = useToast();
+  const { logs, text } = usePhoneLogText(logKind, message);
 
   const handleCopyLogs = useCallback(() => {
-    const logs = logsQuery.data;
-    const payload = logs ? `${logs.path}\n\n${state.message}\n\n${logs.contents}` : state.message;
+    const payload = logs ? `${logs.path}\n\n${message}\n\n${logs.contents}` : message;
     void Clipboard.setStringAsync(payload).then(() => toast.copied());
-  }, [logsQuery.data, state.message, toast]);
-
-  const handleRetry = useCallback(() => {
-    retrySetup().catch((error: Error) =>
-      NativeAlert.alert(t("linuxSetup.failedTitle"), error.message),
-    );
-  }, [t]);
-
-  const handleStartPrevious = useCallback(() => {
-    startPrevious().catch((error: Error) =>
-      NativeAlert.alert(t("linuxSetup.failedTitle"), error.message),
-    );
-  }, [t]);
+  }, [logs, message, toast]);
 
   return (
     <>
-      {state.code === "offline" ? (
-        <Alert variant="warning" size="sm" title={t("linuxSetup.offline")} />
-      ) : null}
+      {offline ? <Alert variant="warning" size="sm" title={t("linuxSetup.offline")} /> : null}
       <Text dataSet={CODE_SURFACE_DATASET} selectable style={styles.errorMessage}>
-        {state.message}
+        {message}
       </Text>
       <View style={styles.logsContainer}>
         <ScrollView contentContainerStyle={styles.logsContent}>
           <Text dataSet={CODE_SURFACE_DATASET} selectable style={styles.logsText}>
-            {logsText}
+            {text}
           </Text>
         </ScrollView>
       </View>
@@ -226,16 +311,65 @@ function SetupFailure({ state }: { state: Extract<SetupState, { status: "setup-f
         <Button variant="secondary" leftIcon={Copy} onPress={handleCopyLogs}>
           {t("linuxSetup.actions.copyLogs")}
         </Button>
-        {state.canStartPrevious ? (
-          <Button variant="outline" onPress={handleStartPrevious}>
-            {t("linuxSetup.actions.startPrevious")}
-          </Button>
-        ) : null}
-        <Button variant="default" leftIcon={RotateCw} onPress={handleRetry}>
-          {t("linuxSetup.actions.retry")}
-        </Button>
+        {children}
       </View>
     </>
+  );
+}
+
+function SetupFailure({ state }: { state: SetupFailedState }) {
+  const { t } = useTranslation();
+  const handleRetry = useCallback(() => {
+    retrySetup().catch(reportFailure(t("linuxSetup.failedTitle")));
+  }, [t]);
+  const handleStartPrevious = useCallback(() => {
+    startPrevious().catch(reportFailure(t("linuxSetup.failedTitle")));
+  }, [t]);
+
+  return (
+    <FailureDetails message={state.message} logKind="setup" offline={state.code === "offline"}>
+      {state.canStartPrevious ? (
+        <Button variant="outline" onPress={handleStartPrevious}>
+          {t("linuxSetup.actions.startPrevious")}
+        </Button>
+      ) : null}
+      <Button variant="default" leftIcon={RotateCw} onPress={handleRetry}>
+        {t("linuxSetup.actions.retry")}
+      </Button>
+    </FailureDetails>
+  );
+}
+
+/**
+ * Linux is installed but failed to start before this phone's host was registered. Without this
+ * screen the app falls through to Welcome with no way back to the Linux section (architecture §7.3).
+ */
+export function LinuxStartFailedScreen({
+  message,
+  onContinue,
+}: {
+  message: string;
+  onContinue: () => void;
+}) {
+  const { t } = useTranslation();
+  const handleRestart = useCallback(() => {
+    restartLinux().catch(reportFailure(t("linuxSetup.startFailed.title")));
+  }, [t]);
+
+  return (
+    <SetupFrame
+      title={t("linuxSetup.startFailed.title")}
+      description={t("linuxSetup.startFailed.description")}
+    >
+      <FailureDetails message={message} logKind="daemon" offline={false}>
+        <Button variant="outline" onPress={onContinue}>
+          {t("linuxSetup.startFailed.continue")}
+        </Button>
+        <Button variant="default" leftIcon={RotateCw} onPress={handleRestart}>
+          {t("linuxSetup.startFailed.restart")}
+        </Button>
+      </FailureDetails>
+    </SetupFrame>
   );
 }
 

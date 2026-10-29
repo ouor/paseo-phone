@@ -3,22 +3,25 @@
 > 담당: UI 개발 · 기준: [design.md](../design/design.md), [architecture.md](../architecture/architecture.md) §4.3·§7.3·§7.4, [core-runtime.md](../core/core-runtime.md) §2
 > 다음 라운드(QA 수정, 사용자 리뷰, 2차 사이클)에도 이어 쓴다.
 
-## 1. 진행 상황 (1라운드)
+## 1. 진행 상황
 
-| 파일 (`packages/app/src/phone/` 기준)                                    | 내용                                                                                                                                |
-| ------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------- |
-| `runtime.ts` / `runtime.android.ts`                                      | `isPhoneRuntime`, `usePhoneRuntimeState()`(안정 스냅샷 캐시 + `useSyncExternalStore`), `restartLinux()`. 기본 파일은 `false`/`null` |
-| `runtime-gate.tsx` / `runtime-gate.android.tsx`                          | `PhoneRuntimeGate`. 기본은 children 그대로                                                                                          |
-| `linux-setup-screen.android.tsx`                                         | 화면 A: 설치·업데이트·실패                                                                                                          |
-| `host-sections.tsx` / `host-sections.android.tsx`                        | `PhoneHostSections` + Reset Linux 섹션. 기본은 `null`                                                                               |
-| `linux-section.android.tsx`                                              | 섹션 B (로그 시트 포함)                                                                                                             |
-| `remote-access-section.android.tsx`, `authorized-keys-sheet.android.tsx` | 섹션 C + 키 시트                                                                                                                    |
-| `exchange-section.android.tsx`                                           | 섹션 D                                                                                                                              |
-| `linux-stopped-callout-source.android.tsx`                               | 사이드바 콜아웃 G                                                                                                                   |
-| `i18n/en.json`, `i18n/ko.json`, `i18n/register.ts`                       | 폰 전용 문구. 기존 i18next 인스턴스에 deep merge                                                                                    |
-| `format.ts` (+ `format.test.ts`), `i18n/register.test.ts`                | 순수 문자열 함수와 테스트 (§5 편차 1)                                                                                               |
+| 파일 (`packages/app/src/phone/` 기준)                                    | 내용                                                                                                              |
+| ------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------- |
+| `runtime.ts` / `runtime.android.ts`                                      | `isPhoneRuntime`, `usePhoneRuntimeState()`(안정 스냅샷 캐시 + `useSyncExternalStore`). 기본 파일은 `false`/`null` |
+| `runtime-gate.tsx` / `runtime-gate.android.tsx`                          | `PhoneRuntimeGate`. 기본은 children 그대로                                                                        |
+| `linux-setup-screen.android.tsx`                                         | 화면 A: 확인 지연·설치·업데이트·실패, 첫 시작 실패                                                                |
+| `logs-sheet.android.tsx`                                                 | 로그 시트(데몬/SSH/설치). Linux 섹션과 화면 A가 같이 쓴다                                                         |
+| `host-sections.tsx` / `host-sections.android.tsx`                        | `PhoneHostSections` + Reset Linux 섹션. 기본은 `null`                                                             |
+| `linux-section.android.tsx`                                              | 섹션 B                                                                                                            |
+| `remote-access-section.android.tsx`, `authorized-keys-sheet.android.tsx` | 섹션 C + 키 시트                                                                                                  |
+| `exchange-section.android.tsx`                                           | 섹션 D                                                                                                            |
+| `linux-stopped-callout-source.android.tsx`                               | 사이드바 콜아웃 G                                                                                                 |
+| `i18n/en.json`, `i18n/ko.json`, `i18n/register.ts`                       | 폰 전용 문구. 기존 i18next 인스턴스에 deep merge                                                                  |
+| `format.ts` (+ `format.test.ts`), `i18n/register.test.ts`                | 순수 문자열 함수와 테스트 (§5 편차 1)                                                                             |
 
-본체 수정은 §4.3 그대로 두 파일: `src/app/_layout.tsx`(import 1 + `<AppShell />`을 `<PhoneRuntimeGate>`로 감쌈), `src/screens/settings/host-page.tsx`(import 1 + `HostAppearanceSection` 다음 한 줄).
+본체 수정은 §4.3 그대로 두 파일: `src/app/_layout.tsx`(import 1 + `<AppShell />`을 `<PhoneRuntimeGate>`로 감쌈), `src/screens/settings/host-page.tsx`(import 1 + `HostAppearanceSection` 다음 한 줄). 두 파일 모두 `phone-fork:` 줄이 2개다.
+
+라운드 3(1차 리뷰 수정, [fix-plan.md](../code-reviews/fix-plan.md) U1–U11): 전부 반영. 코어가 아직 커밋하지 않은 `index.ts`/`types.ts`/`state-schema.ts`(작업 트리)의 `space`, `cancelled`, `PHONE_NOTIFICATION_QUERY`, 숫자 `port`에 맞춰 typecheck했다.
 
 검증: `npm run typecheck` 통과, `npm run lint -- <파일>` 0 오류, `npx vitest run src/phone` 7개 통과. 기기·Gradle은 지시대로 돌리지 않았다.
 
@@ -29,6 +32,9 @@
 | 설치 진행 (6단계, 다운로드 MB·진행 막대)                             | 화면 A                                                   | 첫 실행 시 자동. 앱 전체를 덮는다                          |
 | 업데이트 진행                                                        | 화면 A (update 모드, `paseo`부터; Node 변경 시 처음부터) | 데몬 버전이 바뀐 뒤 앱 시작 또는 Start                     |
 | 실패: 오류 원문, 설치 로그, 로그 복사, 다시 시도, 이전 버전으로 시작 | 화면 A 실패 상태                                         | 자동. 오프라인이면 경고, 공간 부족이면 여유/필요 용량 문구 |
+| 설치 취소됨(`cancelled`)                                             | 화면 A 실패 상태, "중지됨" 제목                          | 설치 중 알림 Stop 뒤                                       |
+| 확인 지연 탈출구: Linux 시작, 로그 시트                              | 화면 A (`checking` 5초 초과)                             | 자동                                                       |
+| 첫 시작 실패: 오류, 데몬 로그, Linux 재시작, 다른 호스트로 계속      | 화면 A 시작 실패                                         | `linux: error`이고 이 기기 호스트가 레지스트리에 없을 때   |
 | Linux 시작·멈추기(확인 대화상자, 실행 중 에이전트 수 포함)           | Settings › Host(이 기기) › Host › **Linux** 첫 행        | 사이드바 Hosts → 이 기기 톱니 → Host                       |
 | 데몬 상태·버전·재시작                                                | Linux 두 번째 행                                         | 같은 곳                                                    |
 | SSH 서버 켜기/끄기                                                   | Linux 세 번째 행 스위치                                  | 같은 곳                                                    |
@@ -43,19 +49,20 @@
 | 저장소 권한 요청 / 권한 후 Linux 재시작                              | Exchange folder 카드 위 Alert                            | 해당 상태일 때만                                           |
 | Linux 다시 설치                                                      | **Reset Linux** 섹션                                     | Exchange folder 아래. 확인 후 화면 A로                     |
 | Linux 멈춤 알림 (Start / Details)                                    | 사이드바 콜아웃                                          | 이 세션에서 Linux가 멈추거나 죽으면 자동. 실행되면 사라짐  |
-| 알림 Stop → 확인 대화상자                                            | Linux 섹션 (`?confirmStop=1`)                            | 알림. **코어 요청 1 필요**                                 |
-| 알림 데몬 응답 없음 → 데몬 로그                                      | 로그 시트 (`?logs=daemon`)                               | 알림. **코어 요청 1 필요**                                 |
+| 알림 Stop → 확인 대화상자                                            | Linux 섹션 (`?confirmStop=1`)                            | 알림. `running`과 `starting`에서                           |
+| 알림 로그 열기 → 데몬 로그                                           | 로그 시트 (`?logs=daemon`)                               | 알림                                                       |
 
 모든 섹션은 `serverId === state.daemon.serverId`인 호스트의 Host 페이지에서만 보인다. iOS·웹·Electron·일반 Android 빌드에는 아무것도 바뀌지 않는다(기본 파일은 no-op, `.android` 파일도 `isPhoneRuntime`으로 먼저 거른다).
 
 ## 3. 동작 메모 (코드에서 바로 안 보이는 것)
 
-- **게이트.** `checking`은 기존 스플래시, `setup`/`setup-failed`는 화면 A, AppShell은 마운트하지 않는다. `ready`가 되면 Linux가 `starting|running`인 동안 이 기기 호스트가 연결될 때까지(최대 60초) 스플래시를 한 번 더 들고 있다가 놓는다(`useLatchedBoolean`). 업스트림의 5초 포기 타이머가 Welcome으로 보내는 것을 막는다. 설치 직후(`setup` → `ready`)에도 같은 대기가 걸린다.
+- **게이트.** `checking`은 기존 스플래시(5초가 넘으면 Start·로그), `setup`/`setup-failed`는 화면 A, AppShell은 마운트하지 않는다. `ready`가 되면 이 기기 호스트가 연결될 때까지(Linux가 `starting|running`이면 최대 60초) 스플래시를 들고 있다가 놓는다(`useLatchedBoolean`, 한 번 놓으면 끝). 업스트림의 5초 포기 타이머가 Welcome으로 보내는 것을 막는다. 놓는 조건: 호스트 온라인, 60초, 사용자가 멈춤(`stopped|stopping`), `error`인데 호스트가 등록돼 있음, "다른 호스트로 계속". `error`이고 호스트가 레지스트리에 없으면(첫 시작 실패) 시작 실패 화면을 보여 준다. 레지스트리가 아직 안 읽혔으면 스플래시로 기다린다. 재시작 후 `starting`이면 다시 스플래시 대기.
 - **i18n 등록 순서.** i18next 백엔드는 언어를 늦게 읽고 최상위 키를 얕게 덮어쓴다. 먼저 번들을 넣으면 백엔드가 그 언어를 건너뛰기도 한다. 그래서 store에 이미 있는 언어에만 deep merge하고, `loaded` 이벤트마다 다시 넣는다. `register.test.ts`가 ko 전환 후 본체 키와 폰 키가 둘 다 살아 있는지 확인한다.
-- **알림 쿼리.** Linux 섹션이 `useLocalSearchParams`로 `confirmStop`/`logs`를 읽고 처리한 뒤 `router.setParams`로 지운다. 같은 알림을 다시 눌러도 다시 동작한다.
+- **알림 쿼리.** Linux 섹션이 `useLocalSearchParams`에서 `PHONE_NOTIFICATION_QUERY`의 키로 값을 꺼내 `format.ts`에 넘기고, 처리한 뒤 `router.setParams`로 지운다. `format.ts`는 네이티브 import가 없어야 vitest가 돌므로 상수를 직접 import하지 않는다.
 - **실행 중 에이전트 수.** 확인 대화상자를 띄우는 순간 `useSessionStore.getState()`에서 센다(구독 없음).
 - **개인 키.** 붙여넣는 순간 `-----BEGIN`/`PRIVATE KEY`를 보면 입력을 비우고 네이티브로 보내지 않는다. 코어가 같은 검사를 한 번 더 한다.
-- **Linux 재시작(교환 폴더 `restart-required`).** 코어에 재시작 API가 없어서 UI가 `stop()` → 상태가 `stopped`가 될 때까지 대기 → `start()`로 묶는다(`restartLinux`, `shortcut:` 주석).
+- **상수.** 포트·주소·경로는 상태의 `ssh.port`, `daemon.listen`, `exchange.linuxPath`만 쓴다(architecture §7.5). 남은 리터럴은 SSH 사용자 `root`와 데스크톱 URI에서 `?daemonPort=`를 빼는 근거(업스트림 기본 6767) 주석뿐이다.
+- **Alert는 `linux`만 본다.** `linux`가 `error`면 daemon·ssh 상태는 무의미하다(§7.1). `killed-by-system`이면 오류 Alert에 phantom 안내 문구를 쓴다.
 
 ## 4. 자기 진단
 
@@ -84,23 +91,19 @@
 
 ## 5. 디자인·계약과 다른 점
 
-1. `src/phone/format.ts`(+ 테스트)를 §7.3 목록 밖에 추가했다. SSH 명령·config, 주소 선택, MB 표기, no-space 메시지 파싱, 알림 쿼리 해석을 React 없이 테스트하려고. `src/phone/**` 안이고 의존은 index.ts 타입뿐이다.
+1. `src/phone/format.ts`(+ 테스트): SSH 명령·config, 주소 선택, 용량 표기, 알림 쿼리 해석. architecture §7.3 목록에 들어갔다. 의존은 index.ts 타입뿐이다.
 2. 포트는 2222(architecture Q7). 디자인 와이어프레임의 8022가 아니다.
 3. 데몬 행에 Restart 버튼(코어 `restartDaemon()`)을 뒀다. 업스트림 Danger zone의 "Restart daemon"은 데몬 프로토콜로 재시작하므로 데몬이 응답 없을 때는 못 쓴다.
 4. Reinstall은 업스트림 Danger zone이 아니라 Exchange folder 아래 별도 섹션 "Reset Linux"(architecture §7.3).
-5. Linux `starting` 중 Stop 버튼을 숨기지 않고 비활성으로 둔다(자리 유지가 같은 효과).
+5. Linux `starting` 중에도 Stop 버튼이 눌린다(코어 `stop()`이 시작을 취소한다, §7.2). `stopping` 중에만 비활성.
 6. 복사 확인은 업스트림 `toast.copied()`. `remoteAccess.copied`, `linuxSetup.logsCopied` 키는 만들지 않았다. "This device"(`settings.host.thisDevice`)도 architecture §4.2대로 쓰지 않는다.
 7. 추가 키: `linuxSetup.actions.startPrevious`, `settings.host.linux.{actions.restart, daemon.hint, phantom.*, notifications.*, logs.{modalTitle,empty,loadFailed,kinds.*}, restartFailed, settingFailed, reinstall.{sectionTitle,failed}}`, `settings.host.remoteAccess.{hostKey.*, noKeys.*, keys.{loadFailed,removeFailed}}`, `settings.host.exchange.{restartRequired.*, openFailed}`. `stopConfirm.message`는 복수형(`_one`/`_other`).
 
 ## 6. 코어에 요청 (팀장 경유)
 
-1. **알림 딥링크 경로 (필수).** `paseo-phone://settings/hosts/<serverId>`는 업스트림 `settings/hosts/[serverId]/index.tsx`가 `/connections`로 `Redirect`하면서 쿼리를 버린다. Linux 섹션은 `/settings/hosts/<serverId>/host`에 있다. 탭·Stop·로그 URL을 다음으로 바꿔 달라:
-   - 탭: `paseo-phone://settings/hosts/<serverId>/host`
-   - Stop: `paseo-phone://settings/hosts/<serverId>/host?confirmStop=1`
-   - 데몬 응답 없음: `paseo-phone://settings/hosts/<serverId>/host?logs=daemon`
-     `serverId`를 모를 때의 `paseo-phone://?confirmStop=1`은 UI가 처리하지 않는다(갈 Host 페이지가 없음). 그 경우 Stop 액션을 빼거나 그냥 앱만 열어 달라.
-2. (선택) `restartLinux()` API. 지금은 UI가 stop → `stopped` 대기 → start로 묶는다. 코어에 있으면 `runtime.android.ts`의 `restartLinux`를 지운다.
-3. (유지 요청) `no-space` 메시지 형식 `free 2.1 GB, need 4.0 GB`를 바꾸면 알려 달라. UI가 파싱한다(`parseNoSpaceMessage`, 실패하면 일반 실패 문구).
+없음. 1라운드 요청(알림 딥링크 경로, `restartLinux()`)은 코어가 반영했고, no-space는 구조화 필드 `space`로 바뀌어 파싱을 지웠다.
+
+기다리는 것: core-runtime R10(`state-schema.ts`, `types.ts`의 `space`·`cancelled`·`PHONE_NOTIFICATION_QUERY`, `index.ts`의 값 export)이 커밋돼야 UI 커밋이 HEAD만으로 typecheck된다. 지금은 작업 트리의 코어 변경 위에서 통과한다.
 
 ## 7. QA에 넘길 확인 항목
 
@@ -112,6 +115,10 @@
 - 저장소 권한 허용 → `restart-required` Alert → Restart Linux → `mounted`.
 - Linux Stop 후 사이드바 콜아웃, Start 시 "Starting..." 비활성, 실행되면 사라짐.
 - 한국어 기기 언어에서 폰 문구와 본체 문구가 둘 다 한국어인지.
+- 첫 시작 실패(예: 6767 점유로 `start-failed`): Welcome이 아니라 시작 실패 화면, 데몬 로그, Linux 재시작 → 스플래시 → 호스트 진입, "다른 호스트로 계속" → Welcome.
+- `checking`이 5초를 넘을 때 Start·로그 보기(네이티브 결함 재현이 어려우면 코드 리뷰로 대체).
+- 설치 중 알림 Stop → "Linux 설치 중지됨" 화면, Retry로 이어하기. `starting` 중 알림 Stop → 확인 대화상자.
+- no-space 실패 문구에 여유/필요 용량이 GB로 나오는지.
 
 ## 8. 1라운드 기기 확인 (devphone01, 2026-10-30)
 

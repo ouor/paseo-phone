@@ -19,12 +19,31 @@
     },
     "failedTitle": "Linux setup failed",
     "failedDescription": "Setup stopped at \"{{step}}\". Retry starts that step again.",
+    "cancelledTitle": "Linux setup stopped",
+    "cancelledDescription": "Setup was stopped at \"{{step}}\". Retry continues from that step.",
     "offline": "No internet connection",
     "noSpace": "Not enough storage. {{free}} free, {{needed}} needed",
     "actions": {
       "copyLogs": "Copy logs",
       "retry": "Retry",
       "startPrevious": "Start previous version"
+    },
+    "logs": {
+      "loading": "Loading logs...",
+      "empty": "No log output yet",
+      "loadFailed": "Unable to load logs: {{message}}"
+    },
+    "checkingSlow": {
+      "title": "Still checking Linux",
+      "description": "This is taking longer than usual. You can start Linux yourself or look at the logs.",
+      "start": "Start Linux",
+      "logs": "View logs"
+    },
+    "startFailed": {
+      "title": "Linux didn't start",
+      "description": "Linux is installed but failed to start. Restart it, or continue and connect to another host.",
+      "restart": "Restart Linux",
+      "continue": "Continue with another host"
     }
   },
   "settings": {
@@ -107,7 +126,7 @@
           "hint": "Deletes Linux and installs it again",
           "action": "Reinstall",
           "confirmTitle": "Reinstall Linux?",
-          "confirmMessage": "Everything inside Linux is deleted, including projects in your home folder and installed agents. The exchange folder is kept.",
+          "confirmMessage": "Kept: this host's registration, the SSH host key and authorized keys. Deleted: everything else in /root, including projects and installed agents. The exchange folder on the phone is kept.",
           "confirm": "Delete and reinstall",
           "failed": "Unable to reinstall Linux"
         }
@@ -158,7 +177,7 @@
           "adding": "Adding...",
           "remove": "Remove",
           "removeTitle": "Remove key?",
-          "removeMessage": "{{comment}} will no longer be able to sign in.",
+          "removeMessage": "{{comment}} will no longer be able to sign in. The SSH server restarts, so open SSH sessions are disconnected.",
           "removeFailed": "Unable to remove key",
           "invalid": "Not a valid public key",
           "privateKey": "This is a private key. Paste the .pub file instead.",
@@ -178,7 +197,7 @@
         },
         "permission": {
           "title": "Storage access needed",
-          "description": "Allow Paseo to manage files so Linux can see this folder.",
+          "description": "Linux needs file access to see this folder. Android grants it for all shared storage, so every program inside Linux can read, change and delete your photos, downloads and documents.",
           "action": "Allow access"
         },
         "restartRequired": {

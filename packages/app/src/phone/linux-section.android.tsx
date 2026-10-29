@@ -1,26 +1,19 @@
-import * as Clipboard from "expo-clipboard";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Alert as NativeAlert, Text, View } from "react-native";
+import { Alert as NativeAlert, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
-import { AdaptiveModalSheet, type SheetHeader } from "@/components/adaptive-modal-sheet";
 import { SettingsCard, SettingsRow, SettingsSection } from "@/components/settings";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { SegmentedControl } from "@/components/ui/segmented-control";
 import { StatusBadge, type StatusBadgeVariant } from "@/components/ui/status-badge";
 import { Switch } from "@/components/ui/switch";
-import { useToast } from "@/contexts/toast-api-context";
-import { useFetchQuery } from "@/data/query";
 import { useStableEvent } from "@/hooks/use-stable-event";
 import { useSessionStore } from "@/stores/session-store";
-import { CODE_SURFACE_DATASET } from "@/styles/code-surface";
-import { settingsStyles } from "@/styles/settings";
 import { confirmDialog } from "@/utils/confirm-dialog";
 import {
-  getLogs,
   openBatterySettings,
+  PHONE_NOTIFICATION_QUERY,
   requestNotificationPermission,
   restartDaemon,
   setKeepAwake,
@@ -32,6 +25,7 @@ import {
   type ServiceState,
 } from "../../modules/paseo-phone-runtime";
 import { readPhoneNotificationIntent } from "./format";
+import { PhoneLogsSheet } from "./logs-sheet.android";
 
 type ReadyState = Extract<PhoneRuntimeState, { status: "ready" }>;
 type TFn = ReturnType<typeof useTranslation>["t"];
@@ -144,16 +138,20 @@ export function LinuxSection({ state, serverId }: { state: ReadyState; serverId:
   const handleCloseLogs = useCallback(() => setLogsOpen(false), []);
 
   // The Linux notification opens this page with ?confirmStop=1 (Stop action) or ?logs=daemon.
-  const params = useLocalSearchParams<{ confirmStop?: string; logs?: string }>();
-  const intent = readPhoneNotificationIntent(params);
+  const params = useLocalSearchParams<Record<string, string | string[]>>();
+  const intent = readPhoneNotificationIntent(
+    params[PHONE_NOTIFICATION_QUERY.confirmStop],
+    params[PHONE_NOTIFICATION_QUERY.logs],
+  );
+  const stoppable = linux.state === "running" || linux.state === "starting";
   useEffect(() => {
     if (!intent.confirmStop) return;
-    router.setParams({ confirmStop: undefined });
-    if (linuxUp) void handleStop();
-  }, [handleStop, intent.confirmStop, linuxUp, router]);
+    router.setParams({ [PHONE_NOTIFICATION_QUERY.confirmStop]: undefined });
+    if (stoppable) void handleStop();
+  }, [handleStop, intent.confirmStop, stoppable, router]);
   useEffect(() => {
     if (!intent.logs) return;
-    router.setParams({ logs: undefined });
+    router.setParams({ [PHONE_NOTIFICATION_QUERY.logs]: undefined });
     openLogs(intent.logs);
   }, [intent.logs, openLogs, router]);
 
@@ -164,7 +162,7 @@ export function LinuxSection({ state, serverId }: { state: ReadyState; serverId:
   );
   if (linux.state === "running" || linux.state === "starting" || linux.state === "stopping") {
     linuxAction = (
-      <Button variant="outline" onPress={handleStop} disabled={linux.state !== "running"}>
+      <Button variant="outline" onPress={handleStop} disabled={!stoppable}>
         {t(
           linux.state === "stopping"
             ? "settings.host.linux.status.stopping"
@@ -281,12 +279,20 @@ function LinuxAlert({ state, onOpenLogs }: { state: ReadyState; onOpenLogs: () =
     );
   }, [t]);
 
+  // Only `linux` is read: when it is stopped or in error, daemon and ssh states carry no meaning (§7.1).
   if (state.linux.state === "error") {
+    const killedBySystem = state.linux.code === "killed-by-system";
     return (
       <Alert
         variant="error"
-        title={t("settings.host.linux.status.crashed")}
-        description={state.linux.message}
+        title={t(
+          killedBySystem
+            ? "settings.host.linux.phantom.title"
+            : "settings.host.linux.status.crashed",
+        )}
+        description={
+          killedBySystem ? t("settings.host.linux.phantom.description") : state.linux.message
+        }
       >
         <Button variant="outline" size="sm" onPress={onOpenLogs}>
           {t("settings.host.linux.logs.open")}
@@ -294,8 +300,7 @@ function LinuxAlert({ state, onOpenLogs }: { state: ReadyState; onOpenLogs: () =
       </Alert>
     );
   }
-  const killedBySystem = state.daemon.state === "error" && state.daemon.code === "killed-by-system";
-  if (state.device.phantomProcessMonitor === "enabled" || killedBySystem) {
+  if (state.device.phantomProcessMonitor === "enabled") {
     return (
       <Alert
         variant="warning"
@@ -333,78 +338,6 @@ function LinuxAlert({ state, onOpenLogs }: { state: ReadyState; onOpenLogs: () =
   return null;
 }
 
-const LOG_KINDS: readonly LogKind[] = ["daemon", "ssh", "setup"];
-const LOGS_SNAP_POINTS = ["70%", "92%"];
-
-function PhoneLogsSheet({
-  visible,
-  kind,
-  onKindChange,
-  onClose,
-}: {
-  visible: boolean;
-  kind: LogKind;
-  onKindChange: (kind: LogKind) => void;
-  onClose: () => void;
-}) {
-  const { t } = useTranslation();
-  const toast = useToast();
-  const header = useMemo<SheetHeader>(
-    () => ({ title: t("settings.host.linux.logs.modalTitle") }),
-    [t],
-  );
-  const options = useMemo(
-    () =>
-      LOG_KINDS.map((value) => ({ value, label: t(`settings.host.linux.logs.kinds.${value}`) })),
-    [t],
-  );
-  const logsQuery = useFetchQuery({
-    queryKey: ["phone-runtime-logs", kind],
-    queryFn: () => getLogs(kind),
-    enabled: visible,
-    dataShape: "value",
-    staleTimeMs: 0,
-    retry: false,
-  });
-
-  let contents = t("settings.host.linux.logs.empty");
-  if (logsQuery.isPending) contents = t("common.loading");
-  else if (logsQuery.error) {
-    contents = t("settings.host.linux.logs.loadFailed", { message: logsQuery.error.message });
-  } else if (logsQuery.data?.contents) contents = logsQuery.data.contents;
-
-  const handleCopy = useCallback(() => {
-    const logs = logsQuery.data;
-    if (!logs) return;
-    void Clipboard.setStringAsync(`${logs.path}\n\n${logs.contents}`).then(() => toast.copied());
-  }, [logsQuery.data, toast]);
-
-  return (
-    <AdaptiveModalSheet
-      visible={visible}
-      onClose={onClose}
-      header={header}
-      snapPoints={LOGS_SNAP_POINTS}
-      testID="phone-linux-logs-sheet"
-    >
-      <View style={styles.sheetBody}>
-        <SegmentedControl options={options} value={kind} onValueChange={onKindChange} size="sm" />
-        <Text style={settingsStyles.rowHint} selectable>
-          {logsQuery.data?.path ?? " "}
-        </Text>
-        <Text style={styles.logOutput} selectable dataSet={CODE_SURFACE_DATASET}>
-          {contents}
-        </Text>
-        <View style={styles.sheetActions}>
-          <Button variant="outline" size="sm" onPress={handleCopy} disabled={!logsQuery.data}>
-            {t("common.actions.copy")}
-          </Button>
-        </View>
-      </View>
-    </AdaptiveModalSheet>
-  );
-}
-
 const styles = StyleSheet.create((theme) => ({
   trailing: {
     flexDirection: "row",
@@ -415,20 +348,6 @@ const styles = StyleSheet.create((theme) => ({
     width: 6,
     height: 6,
     borderRadius: theme.borderRadius.full,
-  },
-  sheetBody: {
-    gap: theme.spacing[3],
-    paddingBottom: theme.spacing[2],
-  },
-  logOutput: {
-    color: theme.colors.foregroundMuted,
-    fontSize: theme.fontSize.code,
-    fontFamily: theme.fontFamily.mono,
-    lineHeight: 18,
-  },
-  sheetActions: {
-    flexDirection: "row",
-    justifyContent: "flex-end",
   },
 }));
 

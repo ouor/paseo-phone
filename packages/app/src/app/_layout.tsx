@@ -129,7 +129,7 @@ import {
 } from "@/utils/host-routes";
 import { PluginCatalogSync } from "@/plugins";
 import { NotificationOpenRouter } from "@/notification-open/react";
-import { PhoneRuntimeGate } from "@/phone/runtime-gate";
+import { PhoneRuntimeGate } from "@/phone/runtime-gate"; // phone-fork: on-device Linux setup gate
 import { ensureOsNotificationPermission } from "@/utils/os-notifications";
 
 polyfillCrypto();
@@ -893,6 +893,7 @@ function RootAppTree() {
         <LucideProvider strokeWidth={ICON_STROKE_WIDTH}>
           <RootProviders>
             <RuntimeProviders>
+              {/* phone-fork: holds AppShell while Linux installs or starts (src/phone/runtime-gate) */}
               <PhoneRuntimeGate>
                 <AppShell />
               </PhoneRuntimeGate>
