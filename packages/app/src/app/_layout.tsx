@@ -129,6 +129,7 @@ import {
 } from "@/utils/host-routes";
 import { PluginCatalogSync } from "@/plugins";
 import { NotificationOpenRouter } from "@/notification-open/react";
+import { PhoneRuntimeGate } from "@/phone/runtime-gate";
 import { ensureOsNotificationPermission } from "@/utils/os-notifications";
 
 polyfillCrypto();
@@ -892,7 +893,9 @@ function RootAppTree() {
         <LucideProvider strokeWidth={ICON_STROKE_WIDTH}>
           <RootProviders>
             <RuntimeProviders>
-              <AppShell />
+              <PhoneRuntimeGate>
+                <AppShell />
+              </PhoneRuntimeGate>
             </RuntimeProviders>
           </RootProviders>
         </LucideProvider>

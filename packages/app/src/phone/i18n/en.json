@@ -1,0 +1,206 @@
+{
+  "linuxSetup": {
+    "installTitle": "Setting up Linux",
+    "installDescription": "Installs Debian and the Paseo daemon on this phone",
+    "updateTitle": "Updating Linux",
+    "updateDescription": "Paseo {{version}} is being installed inside Linux",
+    "backgroundHint": "You can leave the app. Setup continues in the background",
+    "steps": {
+      "download": "Download Debian",
+      "extract": "Extract",
+      "configure": "Configure",
+      "packages": "Install packages",
+      "paseo": "Install Paseo",
+      "start": "Start"
+    },
+    "progress": {
+      "bytes": "{{done}} / {{total}}",
+      "count": "{{done}} / {{total}}"
+    },
+    "failedTitle": "Linux setup failed",
+    "failedDescription": "Setup stopped at \"{{step}}\". Retry starts that step again.",
+    "offline": "No internet connection",
+    "noSpace": "Not enough storage. {{free}} free, {{needed}} needed",
+    "actions": {
+      "copyLogs": "Copy logs",
+      "retry": "Retry",
+      "startPrevious": "Start previous version"
+    }
+  },
+  "settings": {
+    "host": {
+      "linux": {
+        "title": "Linux",
+        "info": "Linux runs in a foreground service. Stopping it stops the daemon, SSH and every agent on this phone.",
+        "runtime": {
+          "title": "Linux",
+          "hint": "{{distro}} · proot"
+        },
+        "status": {
+          "running": "Running",
+          "starting": "Starting...",
+          "stopping": "Stopping...",
+          "stopped": "Stopped",
+          "crashed": "Stopped unexpectedly",
+          "notResponding": "Not responding"
+        },
+        "actions": {
+          "start": "Start",
+          "stop": "Stop",
+          "restart": "Restart"
+        },
+        "stopConfirm": {
+          "title": "Stop Linux?",
+          "message_one": "The daemon, SSH and {{count}} running agent on this phone will stop.",
+          "message_other": "The daemon, SSH and {{count}} running agents on this phone will stop.",
+          "messageIdle": "The daemon and SSH on this phone will stop."
+        },
+        "daemon": {
+          "title": "Daemon",
+          "hint": "{{listen}} · Paseo {{version}}"
+        },
+        "ssh": {
+          "title": "SSH server",
+          "running": "Port {{port}} · Running",
+          "off": "Off",
+          "startsWithLinux": "Starts with Linux",
+          "startFailed": "Unable to start SSH server"
+        },
+        "keepAwake": {
+          "title": "Keep awake with screen off",
+          "hint": "Holds a wake lock so agents keep working. Uses more battery."
+        },
+        "battery": {
+          "title": "Battery optimization is on",
+          "description": "Android may still stop Linux in the background.",
+          "action": "Open battery settings"
+        },
+        "phantom": {
+          "title": "Android may stop Linux processes",
+          "description": "Turn on \"Disable child process restrictions\" in Developer options, or run: adb shell settings put global settings_enable_monitor_phantom_procs false"
+        },
+        "notifications": {
+          "title": "Notifications are off",
+          "description": "Linux keeps running, but its status and Stop button won't show in the notification shade.",
+          "action": "Allow notifications"
+        },
+        "logs": {
+          "title": "Logs",
+          "hint": "Daemon, SSH and setup logs",
+          "open": "Open logs",
+          "modalTitle": "Logs",
+          "empty": "No log output yet",
+          "loadFailed": "Unable to load logs: {{message}}",
+          "kinds": {
+            "daemon": "Daemon",
+            "ssh": "SSH",
+            "setup": "Setup"
+          }
+        },
+        "startFailed": "Unable to start Linux",
+        "stopFailed": "Unable to stop Linux",
+        "restartFailed": "Unable to restart the daemon",
+        "settingFailed": "Unable to change the setting",
+        "reinstall": {
+          "sectionTitle": "Reset Linux",
+          "title": "Reinstall Linux",
+          "hint": "Deletes Linux and installs it again",
+          "action": "Reinstall",
+          "confirmTitle": "Reinstall Linux?",
+          "confirmMessage": "Everything inside Linux is deleted, including projects in your home folder and installed agents. The exchange folder is kept.",
+          "confirm": "Delete and reinstall",
+          "failed": "Unable to reinstall Linux"
+        }
+      },
+      "remoteAccess": {
+        "title": "Remote access",
+        "info": "Desktops connect over SSH. Paseo desktop tunnels to the daemon through the same connection, so the daemon is never exposed on the network.",
+        "network": {
+          "title": "Network",
+          "wifi": "Wi-Fi",
+          "tailscale": "Tailscale",
+          "noneTitle": "No network address",
+          "noneDescription": "Connect to Wi-Fi or start Tailscale."
+        },
+        "sshOff": {
+          "title": "SSH server is off",
+          "description": "Turn it on in Linux above."
+        },
+        "ssh": {
+          "title": "SSH"
+        },
+        "desktop": {
+          "title": "Paseo desktop",
+          "hint": "Add host › Remote SSH, then paste"
+        },
+        "sshConfig": {
+          "title": "SSH config",
+          "hint": "For VS Code Remote-SSH"
+        },
+        "hostKey": {
+          "title": "Host key",
+          "hint": "Match this when a desktop connects for the first time"
+        },
+        "copy": "Copy",
+        "noKeys": {
+          "title": "No authorized keys yet",
+          "description": "Desktops sign in with a key. Add your desktop's public key (for example ~/.ssh/id_ed25519.pub) first."
+        },
+        "keys": {
+          "title": "Authorized keys",
+          "count_one": "{{count}} key",
+          "count_other": "{{count}} keys",
+          "none": "No keys",
+          "emptyList": "No keys yet",
+          "loadFailed": "Unable to load keys: {{message}}",
+          "fieldLabel": "Public key",
+          "add": "Add key",
+          "adding": "Adding...",
+          "remove": "Remove",
+          "removeTitle": "Remove key?",
+          "removeMessage": "{{comment}} will no longer be able to sign in.",
+          "removeFailed": "Unable to remove key",
+          "invalid": "Not a valid public key",
+          "privateKey": "This is a private key. Paste the .pub file instead.",
+          "duplicate": "This key is already authorized"
+        }
+      },
+      "exchange": {
+        "title": "Exchange folder",
+        "info": "One shared folder for moving files in and out of Linux. Keep projects in your Linux home folder, not here.",
+        "phone": {
+          "title": "On this phone",
+          "open": "Open"
+        },
+        "linux": {
+          "title": "In Linux",
+          "notMounted": "Not mounted"
+        },
+        "permission": {
+          "title": "Storage access needed",
+          "description": "Allow Paseo to manage files so Linux can see this folder.",
+          "action": "Allow access"
+        },
+        "restartRequired": {
+          "title": "Restart Linux to finish",
+          "description": "Storage access is on. Linux sees the folder after it restarts.",
+          "action": "Restart Linux"
+        },
+        "mountFailed": "Unable to mount the exchange folder",
+        "openFailed": "Unable to open the folder"
+      }
+    }
+  },
+  "sidebar": {
+    "callouts": {
+      "linuxStopped": {
+        "title": "Linux is stopped",
+        "crashedTitle": "Linux stopped unexpectedly",
+        "description": "Agents on this phone are offline",
+        "start": "Start",
+        "starting": "Starting...",
+        "details": "Details"
+      }
+    }
+  }
+}
