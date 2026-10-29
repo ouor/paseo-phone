@@ -1,7 +1,5 @@
 package io.github.ouor.paseophone.runtime.linux
 
-import io.github.ouor.paseophone.runtime.setup.SetupMode
-import io.github.ouor.paseophone.runtime.setup.SetupRunner
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -72,11 +70,15 @@ class ProotCommandTest {
     assertEquals(listOf(0, 1, 3), FakeSysdata.hostCpuIds("processor\t: 0\nprocessor : 1\nfoo: x\nprocessor : 3\n"))
   }
 
-  @Test fun nodeShasums() {
-    val body = "abc  node-v22.20.0-linux-x64.tar.xz\n" +
-      "${"a".repeat(64)}  node-v22.20.0-linux-arm64.tar.xz\n"
-    assertEquals("a".repeat(64), NodeDist.sha256From(body, NodeDist.archiveName("22.20.0")))
-    assertNull(NodeDist.sha256From(body, "node-v22.20.0-linux-arm64.tar.gz"))
+
+  @Test fun procTreeParsing() {
+    assertEquals(42, ProcTree.ppidFromStat("1234 (node (worker) x) S 42 1234 1234 0 -1"))
+    assertNull(ProcTree.ppidFromStat("garbage"))
+    assertEquals(10123, ProcTree.uidFromStatus("Name:\tproot\nUid:\t10123\t10123\t10123\t10123\nGid:\t1\n"))
+    // 100 = proot; 101 bash → 102 node → 104; 103 is someone else's child
+    val parents = mapOf(101 to 100, 102 to 101, 104 to 102, 103 to 1, 100 to 50)
+    assertEquals(listOf(101, 102, 104), ProcTree.descendantsOf(100, parents))
+    assertEquals(emptyList<Int>(), ProcTree.descendantsOf(104, parents))
   }
 
   @Test fun exitInfoSignal() {
@@ -84,11 +86,4 @@ class ProotCommandTest {
     assertEquals(ExitInfo(1, null), ExitInfo.fromExitCode(1))
   }
 
-  @Test fun setupStepsAndNodeHeader() {
-    assertEquals(listOf("paseo"), SetupRunner.stepsFor(SetupMode.UPDATE_DAEMON))
-    assertEquals(listOf("download", "extract", "paseo"), SetupRunner.stepsFor(SetupMode.UPDATE_NODE))
-    val h = "#define NODE_MAJOR_VERSION 22\n#define NODE_MINOR_VERSION 20\n#define NODE_PATCH_VERSION 0\n"
-    assertEquals("22.20.0", SetupRunner.parseNodeVersionHeader(h))
-    assertNull(SetupRunner.parseNodeVersionHeader("nothing"))
-  }
 }

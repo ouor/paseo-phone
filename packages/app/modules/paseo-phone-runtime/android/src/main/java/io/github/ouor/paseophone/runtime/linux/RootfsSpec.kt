@@ -19,22 +19,11 @@ object RootfsSpec {
   const val ARCHIVE_NAME = "debian-trixie-aarch64-pd-v4.29.0.tar.xz"
 }
 
-/** nodejs.org linux-arm64 tarball for a pinned version (architecture D5). */
+/** nodejs.org linux-arm64 tarball for a pinned version (architecture D5). Its sha256 is BuildConfig.NODE_SHA256 (§3.1). */
 object NodeDist {
   fun archiveName(version: String) = "node-v$version-linux-arm64.tar.xz"
 
   fun url(version: String) = "https://nodejs.org/dist/v$version/${archiveName(version)}"
-
-  fun shasumsUrl(version: String) = "https://nodejs.org/dist/v$version/SHASUMS256.txt"
-
-  /** Picks [fileName]'s hash out of a SHASUMS256.txt body, or null. */
-  fun sha256From(shasums: String, fileName: String): String? =
-    shasums.lineSequence()
-      .map { it.trim().split(Regex("\\s+")) }
-      .firstOrNull { it.size == 2 && it[1].removePrefix("*") == fileName }
-      ?.get(0)
-      ?.lowercase()
-      ?.takeIf { it.length == 64 }
 
   /** The tarball's top-level `node-v…/` directory is dropped when extracting into /usr/local. */
   const val STRIP_COMPONENTS = 1

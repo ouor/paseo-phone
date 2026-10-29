@@ -2,11 +2,11 @@
 
 Sources and outputs for `android/src/main/jniLibs/arm64-v8a/`. Rebuild with `./build-proot.sh` (Linux or WSL, NDK r29), then update the sha256 table.
 
-| Input  | Pin                                                                               |
-| ------ | --------------------------------------------------------------------------------- |
-| proot  | https://github.com/termux/proot commit `4dba3afbf3a63af89b4d9c1a59bf2bda10f4d10f` |
-| talloc | https://www.samba.org/ftp/talloc/talloc-2.4.3.tar.gz (2.4.3)                      |
-| NDK    | r29 (`NDK_MAJOR` in `build-proot.sh`), `MIN_API=26`                               |
+| Input  | Pin                                                                                                                                                                                                            |
+| ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| proot  | https://github.com/termux/proot commit `4dba3afbf3a63af89b4d9c1a59bf2bda10f4d10f`                                                                                                                              |
+| talloc | https://www.samba.org/ftp/talloc/talloc-2.4.3.tar.gz (2.4.3), sha256 `dc46c40b9f46bb34dd97fe41f548b0e8b247b77a918576733c528e83abd854dd` (same as termux-packages libtalloc 2.4.3), checked by `build-proot.sh` |
+| NDK    | r29 (`NDK_MAJOR` in `build-proot.sh`, any other revision is refused), `MIN_API=26`                                                                                                                             |
 
 ## Current binaries
 

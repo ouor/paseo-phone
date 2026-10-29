@@ -1,6 +1,7 @@
 // Adapted from Kai (https://github.com/SimonSchubert/Kai),
 // composeApp/src/androidMain/kotlin/com/inspiredandroid/kai/linux/ProotLauncher.kt (execute), Apache-2.0.
-// Modifications: streams to a log file and a line callback instead of buffering, suspend + timeout.
+// Modifications: streams to a log file and a line callback instead of buffering, suspend + timeout,
+// process-tree stop on timeout and cancellation.
 package io.github.ouor.paseophone.runtime.linux
 
 import android.content.Context
@@ -18,7 +19,8 @@ data class ExecResult(val exitCode: Int, val timedOut: Boolean, val lastErrorLin
 object ProotExec {
   /**
    * Runs [spec] to completion. stdout and stderr go to [logFile] and [onLine] (pump threads).
-   * On timeout or coroutine cancellation proot is SIGKILLed (`--kill-on-exit` ends the guest).
+   * On timeout or coroutine cancellation the tree is stopped with [ProotProcess.stop] (5 s grace,
+   * architecture §8.3). Cancellation is rethrown, never turned into a result.
    */
   suspend fun run(
     context: Context,
@@ -42,15 +44,16 @@ object ProotExec {
     try {
       val info = withTimeoutOrNull(timeoutMs) { exited.await() }
       if (info == null) {
-        proc.destroyForcibly()
-        withContext(NonCancellable) { exited.await() }
+        proc.stop(STOP_GRACE_MS)
         ExecResult(-1, true, lastErr.get() ?: "Timed out after ${timeoutMs / 1000}s")
       } else {
         ExecResult(info.exitCode, false, lastErr.get())
       }
     } catch (e: Throwable) {
-      proc.destroyForcibly()
+      withContext(NonCancellable) { proc.stop(STOP_GRACE_MS) }
       throw e
     }
   }
+
+  private const val STOP_GRACE_MS = 5_000L
 }

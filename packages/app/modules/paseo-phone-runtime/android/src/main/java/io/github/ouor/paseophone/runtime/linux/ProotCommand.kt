@@ -9,9 +9,9 @@ import java.io.File
 data class ProotSpec(
   /** argv inside the rootfs, e.g. listOf("/bin/bash", "/opt/paseo-phone/run-daemon.sh"). */
   val command: List<String>,
-  /** Added to the guest environment (overrides the defaults). */
+  /** Added to the guest environment (overrides the defaults). PASEO_PHONE_NODENAME is always set. */
   val env: Map<String, String> = emptyMap(),
-  /** When set, bound to /root/exchange. */
+  /** When set, bound to [PhoneConstants.GUEST_EXCHANGE]. */
   val exchangeDir: File? = null,
   val cwd: String = "/root",
 )
@@ -21,7 +21,6 @@ data class ProotInvocation(val argv: List<String>, val env: Map<String, String>,
 
 object ProotCommand {
   const val GUEST_PATH = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
-  const val EXCHANGE_GUEST_PATH = "/root/exchange"
   private const val KERNEL_RELEASE = "6.17.0-PRoot"
   private const val KERNEL_VERSION = "#1 SMP PREEMPT_DYNAMIC Fri, 10 Oct 2025 00:00:00 +0000"
 
@@ -62,7 +61,7 @@ object ProotCommand {
       fakeProc.forEach { (file, guest) -> add("--bind=${file.path}:$guest") }
       add("--bind=${tmp.path}:/tmp")
       add("--bind=${tmp.path}:/dev/shm")
-      spec.exchangeDir?.let { add("--bind=${it.path}:$EXCHANGE_GUEST_PATH") }
+      spec.exchangeDir?.let { add("--bind=${it.path}:${PhoneConstants.GUEST_EXCHANGE}") }
       add("/usr/bin/env")
       add("-i")
       (guestEnv(nodename) + spec.env).forEach { (k, v) -> add("$k=$v") }
@@ -84,7 +83,7 @@ object ProotCommand {
     "LANG" to "C.UTF-8",
     "TERM" to "xterm-256color",
     "TMPDIR" to "/tmp",
-    "PASEO_PHONE_NODENAME" to nodename,
+    PhoneConstants.ENV_NODENAME to nodename,
   )
 }
 

@@ -24,6 +24,8 @@ PROOT_REPO="https://github.com/termux/proot.git"
 PROOT_COMMIT="4dba3afbf3a63af89b4d9c1a59bf2bda10f4d10f"
 TALLOC_VERSION="2.4.3"
 TALLOC_URL="https://www.samba.org/ftp/talloc/talloc-${TALLOC_VERSION}.tar.gz"
+# Same value as termux-packages libtalloc 2.4.3 (commit fbc04945). Keep in sync with PINS.md.
+TALLOC_SHA256="dc46c40b9f46bb34dd97fe41f548b0e8b247b77a918576733c528e83abd854dd"
 MIN_API=26
 ABIS="arm64-v8a"
 
@@ -50,7 +52,7 @@ find_ndk() {
         [[ -n "$var" && -d "$var" ]] && { echo "$var"; return; }
     done
 
-    # Search SDK locations for NDK r$NDK_MAJOR, falling back to latest installed
+    # Search SDK locations for NDK r$NDK_MAJOR only; any other NDK changes the output (PINS.md)
     local sdk_dirs=()
     if [[ -f "$SCRIPT_DIR/local.properties" ]]; then  # optional: sdk.dir=<path>
         local prop_sdk
@@ -67,10 +69,6 @@ find_ndk() {
         local preferred
         preferred=$(ls -d "$sdk/ndk/${NDK_MAJOR}."* 2>/dev/null | sort -V | tail -1) || true
         [[ -n "${preferred:-}" ]] && { echo "$preferred"; return; }
-        # Fall back to latest
-        local found
-        found=$(ls -d "$sdk/ndk/"* 2>/dev/null | sort -V | tail -1) || true
-        [[ -n "${found:-}" ]] && { echo "$found"; return; }
     done
 
     echo "ERROR: Android NDK r${NDK_MAJOR} not found. Install it via SDK Manager or set ANDROID_NDK_HOME." >&2
@@ -88,6 +86,13 @@ fi
 # ── Setup ──────────────────────────────────────────────────────────────────────
 NDK="$(find_ndk)"
 echo "Using NDK: $NDK"
+
+# ANDROID_NDK_HOME/ROOT can point anywhere: check the revision explicitly.
+NDK_REVISION=$(grep '^Pkg.Revision' "$NDK/source.properties" 2>/dev/null | cut -d= -f2- | tr -d ' ' || true)
+if [[ "${NDK_REVISION%%.*}" != "$NDK_MAJOR" ]]; then
+    echo "ERROR: NDK at $NDK is revision '${NDK_REVISION:-unknown}', need r${NDK_MAJOR} (PINS.md)." >&2
+    exit 1
+fi
 
 # Warn if NDK is a pre-release version (F-Droid requires stable)
 NDK_PROPS="$NDK/source.properties"
@@ -123,7 +128,8 @@ git -C "$BUILD_DIR/proot" checkout -q "$PROOT_COMMIT"
 
 if [[ ! -d "$BUILD_DIR/talloc-${TALLOC_VERSION}" ]]; then
     echo "Downloading talloc ${TALLOC_VERSION}..."
-    curl -sL "$TALLOC_URL" -o "$BUILD_DIR/talloc.tar.gz"
+    curl -fsSL "$TALLOC_URL" -o "$BUILD_DIR/talloc.tar.gz"
+    echo "${TALLOC_SHA256}  $BUILD_DIR/talloc.tar.gz" | sha256sum -c - || { rm -f "$BUILD_DIR/talloc.tar.gz"; echo "ERROR: talloc sha256 mismatch" >&2; exit 1; }
     tar xzf "$BUILD_DIR/talloc.tar.gz" -C "$BUILD_DIR"
     rm "$BUILD_DIR/talloc.tar.gz"
 fi

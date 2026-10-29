@@ -55,17 +55,6 @@ object Downloader {
     if (!part.renameTo(target)) throw IOException("Cannot rename ${part.name}")
   }
 
-  /** Small text bodies (SHASUMS256.txt). */
-  suspend fun fetchText(url: String): String = withContext(Dispatchers.IO) {
-    val conn = open(url, 0)
-    try {
-      if (conn.responseCode != HttpURLConnection.HTTP_OK) throw IOException("HTTP ${conn.responseCode} from $url")
-      conn.inputStream.use { String(it.readBytes(), Charsets.UTF_8) }
-    } finally {
-      conn.disconnect()
-    }
-  }
-
   fun sha256Of(file: File): String {
     val digest = MessageDigest.getInstance("SHA-256")
     FileInputStream(file).use { input ->
