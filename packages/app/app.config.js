@@ -12,6 +12,8 @@ const appVariant = process.env.APP_VARIANT ?? "production";
 const isFdroidBuild = process.env.PASEO_FDROID_BUILD === "1";
 const isWatchdogBuild = process.env.PASEO_WATCHDOG_BUILD === "1";
 const isProfileBuild = process.env.PASEO_PROFILE_BUILD === "1";
+// Paseo Phone fork: on-device Linux runtime build (docs/phone-dev-machine/architecture/architecture.md §6).
+const isPhoneBuild = appVariant === "phone";
 
 const buildProfile = isFdroidBuild
   ? {
@@ -92,6 +94,12 @@ const variants = {
       fallbackRelativePath: "./.secrets/GoogleService-Info.debug.plist",
     }),
   },
+  phone: {
+    name: "Paseo Phone",
+    packageId: "io.github.ouor.paseophone",
+    googleServicesFile: undefined,
+    googleServiceInfoPlist: undefined,
+  },
 };
 
 const variant = variants[appVariant] ?? variants.production;
@@ -104,7 +112,7 @@ export default {
     version: nativeReleaseVersion.appVersion,
     orientation: "portrait",
     icon: "./assets/images/icon.png",
-    scheme: "paseo",
+    scheme: isPhoneBuild ? "paseo-phone" : "paseo",
     userInterfaceStyle: "automatic",
     newArchEnabled: true,
     ios: {
@@ -178,6 +186,8 @@ export default {
             kotlinVersion: "2.1.20",
             // Allow HTTP connections for local network hosts in release builds
             usesCleartextTraffic: true,
+            // proot binaries run from nativeLibraryDir, so they must be extracted from the APK.
+            ...(isPhoneBuild ? { useLegacyPackaging: true } : {}),
           },
         },
       ],
@@ -193,6 +203,7 @@ export default {
       fdroidBuild: isFdroidBuild,
       profileBuild: isProfileBuild,
       watchdogBuild: isWatchdogBuild,
+      phoneRuntime: isPhoneBuild,
       diagnosticRevision: process.env.PASEO_DIAGNOSTIC_REVISION,
       diagnosticBuildTime: process.env.PASEO_DIAGNOSTIC_BUILD_TIME,
       router: {},
