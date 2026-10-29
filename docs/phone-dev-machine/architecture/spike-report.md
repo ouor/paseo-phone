@@ -174,3 +174,7 @@ screen off 03:00:40
 7. **성능 기대치:** 파일 메타데이터 작업 10~50배, 일반 작업 2~3배. 대형 모노레포·무거운 빌드는 범위 밖이라는 기획서 판단 유지.
 8. **외부 노출:** `0.0.0.0` 바인딩 시 인증 없음 — 비밀번호 또는 페어링을 반드시 켠다. sshd는 키 인증만.
 9. **다음 단계에서 확인할 것:** Kai의 proot 빌드가 Termux proot(5.1.107)와 같은 동작(특히 `/proc/self/fd`, link2symlink, sysvipc)을 하는지. 이번 결과는 Termux proot 기준이다.
+
+## 정리 (2026-10-30)
+
+스파이크 종료 후 devphone01에서 Paseo 데몬(0.0.0.0:6767, 인증 없음), proot sshd(8023), Termux sshd(8022)를 멈추고 `am force-stop com.termux`로 남은 프로세스를 정리했다. 테스트 키(`spike-test`)는 Termux와 rootfs의 `authorized_keys`에서 지웠다. PC에서 6767/8023/8022 모두 닫힘을 확인했다. Termux와 proot Debian rootfs(에이전트·데몬 설치 상태)는 남아 있다. phantom process 설정(`settings_enable_monitor_phantom_procs=false`)은 그대로 둔다.
