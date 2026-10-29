@@ -40,7 +40,7 @@ Paseo Phone은 안드로이드 폰 하나를 개발 머신으로 만듭니다. �
 
 ## 설치
 
-1. [Releases](https://github.com/ouor/paseo/releases)에서 APK를 받으세요. 태그는 `phone-v<업스트림 버전>-<n>`입니다. 첫 릴리스는 `phone-v0.14.0-1`(arm64, 프리릴리스)입니다.
+1. [Releases](https://github.com/ouor/paseo/releases)에서 `paseo-phone-arm64.apk`를 받으세요. 태그는 `phone-v<업스트림 버전>-<n>`입니다. 첫 릴리스는 `phone-v0.14.0-1`(arm64, 프리릴리스)입니다.
 2. 다른 키로 서명된 이전 빌드(초기 미서명/debug 빌드)가 있으면 먼저 삭제하세요. 그대로는 안드로이드가 업데이트를 거부합니다. 삭제하면 `/root` 아래 레포와 에이전트 로그인을 포함한 리눅스 환경이 지워집니다.
 3. APK를 설치하세요. 앱 이름은 "Paseo Phone"(`io.github.ouor.paseophone`)이고, 일반 Paseo 앱과 따로 설치됩니다.
 
@@ -111,7 +111,7 @@ bash scripts/phone/build-apk.sh [--skip-tests] [--install] [--device <serial>]
 
 ## 제한과 하지 않는 것
 
-- arm64만, Debian만. 앱에 리눅스 터미널 화면은 없습니다. SSH를 쓰세요.
+- arm64만, Debian만. 셸 접속은 SSH로 안내하고 검증했습니다.
 - proot에서는 파일 작업이 훨씬 느립니다. 무거운 빌드(안드로이드 Gradle 빌드 등)는 범위 밖입니다.
 - 외부 서버, 클라우드, Paseo 릴레이를 통한 접속은 없습니다. 데몬 비밀번호나 LAN에 노출된 데몬도 없습니다.
 - 공유 저장소에서의 레포 작업, 양방향 동기화는 없습니다.

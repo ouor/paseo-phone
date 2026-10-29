@@ -40,7 +40,7 @@ The app detects both settings and warns you. It does not change them.
 
 ## Install
 
-1. Download the APK from [Releases](https://github.com/ouor/paseo/releases). Tags are `phone-v<upstream version>-<n>`. The first is `phone-v0.14.0-1` (arm64, pre-release).
+1. Download `paseo-phone-arm64.apk` from [Releases](https://github.com/ouor/paseo/releases). Tags are `phone-v<upstream version>-<n>`. The first is `phone-v0.14.0-1` (arm64, pre-release).
 2. If you have an older build signed with a different key (the early unsigned/debug builds), uninstall it first. Android refuses the update otherwise. Uninstalling deletes the Linux environment, including repos and agent logins under `/root`.
 3. Install the APK. The app is "Paseo Phone" (`io.github.ouor.paseophone`) and installs next to the regular Paseo app.
 
@@ -111,7 +111,7 @@ The daemon is the public `@getpaseo/cli` at the version in `packages/server/pack
 
 ## Limitations and non-goals
 
-- arm64 only, Debian only. No Linux terminal screen in the app; use SSH.
+- arm64 only, Debian only. Shell access is documented and tested over SSH.
 - File operations are much slower under proot. Heavy builds (such as Android Gradle builds) are out of scope.
 - No access through outside servers, cloud hosts, or the Paseo relay. No daemon password or LAN-exposed daemon.
 - No repo work in shared storage and no two-way sync.
