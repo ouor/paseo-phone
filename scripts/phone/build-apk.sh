@@ -6,7 +6,8 @@ set -euo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 app="$root/packages/app"
 
-daemon_version=$(node -p "require('$root/packages/server/package.json').version")
+# Relative path: Windows node cannot resolve Git Bash /c/... paths.
+daemon_version=$(cd "$root" && node -p "require('./packages/server/package.json').version")
 if ! npm view "@getpaseo/cli@$daemon_version" version >/dev/null 2>&1; then
   echo "warning: @getpaseo/cli@$daemon_version is not on npm yet; the on-device 'paseo' setup step will fail" >&2
 fi
