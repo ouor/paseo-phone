@@ -9,6 +9,8 @@
 # Prints one line per step; the full output goes to artifacts/paseo-phone-build.log.
 # Refuses a dirty tree (untracked external/ is allowed) and fails if the tree changes mid-build,
 # so the APK always matches the commit written to artifacts/paseo-phone-arm64.apk.txt.
+# Signs with the owner's release key (signing/SIGNING.md); the key and its password stay in the
+# git-ignored signing/release.p12 and signing/keystore.properties and never reach the log.
 set -uo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -17,6 +19,10 @@ out="$root/artifacts"
 apk="$out/paseo-phone-arm64.apk"
 log="$out/paseo-phone-build.log"
 tests=1 install=0 device="devphone01:5555"
+keystore="$root/signing/release.p12"
+keyprops="$root/signing/keystore.properties"
+# Owner's release certificate (signing/SIGNING.md). A different digest must never ship.
+cert_sha256=c8efe9f1c2c003699482945b121b3d0c8ca5e4589aeaede5912c7de6ce729ebc
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -60,6 +66,13 @@ if [ -n "$(dirty)" ]; then
   dirty >&2
   exit 1
 fi
+for f in "$keystore" "$keyprops"; do
+  [ -f "$f" ] || { echo "Missing $f. Ask the owner to re-export the signing files (signing/SIGNING.md); never create a new key." >&2; exit 1; }
+done
+sdk="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-$LOCALAPPDATA/Android/Sdk}}"
+sdk="$(cd "$sdk" 2>/dev/null && pwd)" || { echo "Android SDK not found (set ANDROID_HOME)" >&2; exit 1; }
+build_tools="$sdk/build-tools/$(ls "$sdk/build-tools" 2>/dev/null | sort -V | tail -1)"
+[ -f "$build_tools/lib/apksigner.jar" ] || { echo "apksigner not found under $sdk/build-tools" >&2; exit 1; }
 commit=$(git -C "$root" rev-parse HEAD)
 short=$(git -C "$root" rev-parse --short HEAD)
 echo "Building Paseo Phone from $short (log: $log)"
@@ -119,7 +132,40 @@ if [ -n "$(dirty)" ] || [ "$(git -C "$root" rev-parse HEAD)" != "$commit" ]; the
   echo "BUILD FAILED at step: verify (the tree changed during the build; the APK would not match $short)"
   exit 1
 fi
-cp "$app/android/app/build/outputs/apk/release/app-release.apk" "$apk"
+unsigned="$app/android/app/build/outputs/apk/release/app-release.apk"
+aligned="$out/paseo-phone-arm64.aligned.apk"
+export build_tools keystore keyprops apk aligned unsigned cert_sha256
+
+# Gradle output is normally aligned already; align only when the check fails.
+align() {
+  if "$build_tools/zipalign" -c -P 16 4 "$unsigned"; then
+    cp "$unsigned" "$aligned"
+  else
+    "$build_tools/zipalign" -f -P 16 4 "$unsigned" "$aligned"
+  fi
+}
+# apksigner replaces the debug signature Gradle applied. The password is read into this one
+# process's environment only; it is never a command-line argument and never reaches the log.
+sign() {
+  STOREPASS="$(sed -n 's/^storePassword=//p' "$keyprops" | tr -d '\r')" \
+    java -jar "$build_tools/lib/apksigner.jar" sign --ks "$keystore" --ks-type PKCS12 \
+    --ks-key-alias release --ks-pass env:STOREPASS --key-pass env:STOREPASS --v4-signing-enabled false \
+    --out "$apk" "$aligned"
+}
+verify_cert() {
+  local got
+  # Every signer line ("V2 Signer: ...", "Signer #1 ...", by apksigner version) must carry the
+  # owner's digest; sort -u collapses them, so a second, different signer shows up as a mismatch.
+  got=$(java -jar "$build_tools/lib/apksigner.jar" verify --print-certs "$apk" | tr -d '\r' |
+    sed -n 's/^.*[Ss]igner.*certificate SHA-256 digest: //p' | sort -u | tr '\n' ' ' | sed 's/ $//')
+  echo "signer SHA-256: $got"
+  [ "$got" = "$cert_sha256" ] || { echo "certificate digest does not match signing/SIGNING.md" >&2; return 1; }
+}
+export -f align sign verify_cert
+step align 5m bash -c align
+step sign 5m bash -c sign
+rm -f "$aligned"
+step verify-sig 2m bash -c verify_cert
 size=$(wc -c <"$apk" | tr -d ' ')
 sha=$(sha256sum "$apk" | cut -d' ' -f1)
 {
@@ -129,10 +175,30 @@ sha=$(sha256sum "$apk" | cut -d' ' -f1)
   echo "unit_tests=$([ $tests -eq 1 ] && echo passed || echo skipped)"
   echo "size_bytes=$size"
   echo "sha256=$sha"
+  echo "cert_sha256=$cert_sha256"
 } >"$apk.txt"
 
 if [ $install -eq 1 ]; then
-  step install 5m adb -s "$device" install -r "$apk"
+  printf '%-12s ... ' install
+  printf '
+===== install (%s) =====
+' "$device" >>"$log"
+  result=$(timeout 5m adb -s "$device" install -r "$apk" 2>&1)
+  rc=$?
+  echo "$result" >>"$log"
+  if [ $rc -ne 0 ] || ! grep -q '^Success' <<<"$result"; then
+    if grep -q INSTALL_FAILED_UPDATE_INCOMPATIBLE <<<"$result"; then
+      echo "FAILED: the installed app on $device has a different signature."
+      echo "Updating needs an uninstall first, which WIPES the Linux rootfs (/root, agent logins, keys)."
+      echo "Not uninstalling automatically. If that is acceptable: adb -s $device uninstall io.github.ouor.paseophone"
+    else
+      echo "FAILED (exit $rc)"
+      tail -n 5 <<<"$result"
+    fi
+    echo "BUILD OK, INSTALL FAILED at step: install"
+    exit 1
+  fi
+  echo ok
 fi
 
 echo "BUILD OK in $(($(date +%s) - started))s"

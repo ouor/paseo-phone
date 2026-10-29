@@ -93,7 +93,34 @@ Expo 자동 링크는 `packages/app/modules/`를 무조건 훑고, 옵션은 `pa
 
 ## scripts/phone/build-apk.sh
 
-`scripts/build-apk.mjs`와 같은 순서를 bash로: `APP_VARIANT=phone EXPO_PUBLIC_LOCAL_DAEMON=127.0.0.1:6767 PASEO_WATCHDOG_BUILD=1`, 진단 리비전/시각 env, `npm run build:app-deps` → `expo prebuild --platform android --no-install --clean` → generated assets 삭제 → `gradlew assembleRelease … -PreactNativeArchitectures=arm64-v8a` → `artifacts/paseo-phone-arm64.apk`. 시작할 때 `npm view @getpaseo/cli@<packages/server 버전>`이 실패하면 경고만 낸다(§9). `--clean` prebuild는 `packages/app/android/`를 다시 만든다.
+명령 하나로 서명된 phone APK를 만든다.
+
+```bash
+bash scripts/phone/build-apk.sh                 # 빌드 + 모듈 단위 테스트 + 서명 + 검증
+bash scripts/phone/build-apk.sh --skip-tests    # 단위 테스트 생략
+bash scripts/phone/build-apk.sh --install [--device devphone01:5555]   # 끝나면 adb install -r
+```
+
+화면에는 단계 줄과 결과만 나온다. 전체 출력은 `artifacts/paseo-phone-build.log`에 남는다. 실패하면 0이 아닌 값으로 끝나고 `BUILD FAILED at step: <단계>`와 로그 끝 25줄을 보여 준다. 성공하면 APK 경로, 크기, 커밋을 출력하고 `artifacts/paseo-phone-arm64.apk.txt`(commit, built_at, daemon_version, unit_tests, size_bytes, sha256, cert_sha256)를 쓴다.
+
+| 단계         | 제한 시간 | 하는 일                                                                                                                                                                                                                                                                                        |
+| ------------ | --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| (사전)       | —         | 작업 트리가 깨끗해야 한다(추적 안 하는 `external/`만 허용). 무시된 `signing/release.p12`·`keystore.properties`는 git이 무시하므로 상관없다. 둘 중 하나가 없거나 build-tools의 `apksigner`가 없으면 바로 실패. 커밋 기록, 이전 APK·사이드카 삭제. `npm view @getpaseo/cli@<버전>` 실패는 경고만 |
+| `env-repair` | 10분      | npm 11이 건너뛴 `react-native-enriched-markdown` postinstall 복구. `cpp/highlight/vendor/tree-sitter`와 `grammars/`가 없으면 `C:\Windows\System32`(bsdtar)를 PATH 앞에 두고 `node postinstall.mjs`. `generated/`는 네이티브 빌드가 만드므로 검사하지 않는다                                    |
+| `app-deps`   | 20분      | `npm run build:app-deps`                                                                                                                                                                                                                                                                       |
+| `prebuild`   | 15분      | `expo prebuild --platform android --no-install --clean` (`APP_VARIANT=phone`, `EXPO_PUBLIC_LOCAL_DAEMON`)                                                                                                                                                                                      |
+| `gradle`     | 60분      | generated assets 삭제 후 `:paseo-phone-runtime:testReleaseUnitTest assembleRelease`, arm64 전용, Gradle 빌드 캐시 사용                                                                                                                                                                         |
+| (확인)       | —         | 빌드 중 트리나 HEAD가 바뀌었으면 실패(`verify`). APK가 기록된 커밋과 맞지 않을 수 있어서다                                                                                                                                                                                                     |
+| `align`      | 5분       | `zipalign -c -P 16 4`가 통과하면 그대로, 아니면 정렬                                                                                                                                                                                                                                           |
+| `sign`       | 5분       | 최신 build-tools의 `apksigner.jar`로 `signing/release.p12`(PKCS12, alias `release`) 서명. Gradle이 넣은 debug 서명은 대체된다. v4(`.idsig`)는 끈다                                                                                                                                             |
+| `verify-sig` | 2분       | `apksigner verify --print-certs`의 모든 서명자 SHA-256이 `c8efe9f1…ebc`(signing/SIGNING.md)와 같아야 한다. debug 서명 APK로 불일치 실패를 확인했다                                                                                                                                             |
+| `install`    | 5분       | `--install`일 때만. `INSTALL_FAILED_UPDATE_INCOMPATIBLE`이면 "서명이 달라 uninstall이 필요하고 uninstall은 Linux rootfs를 지운다"고 알리고 멈춘다. 자동으로 지우지 않는다                                                                                                                      |
+
+- 비밀번호: `keystore.properties`의 `storePassword`를 `sign` 프로세스 하나의 env(`STOREPASS`)에만 넣고 `--ks-pass env:STOREPASS`로 넘긴다. 명령줄 인자, 로그, 사이드카에 나오지 않는다. `set -x`는 쓰지 않는다.
+- 깨끗한 트리 확인은 HEAD 스냅샷 대신 시작·끝 검사로 했다. `git worktree`는 `node_modules`(npm install 수 분)와 `packages/app/android` prebuild를 새로 해야 해서 빌드 캐시 이점이 작다.
+- 빌드 중에는 레포 파일을 고치지 않는다. 추적 안 하는 새 파일 하나도 `verify`에서 막힌다(실제로 빌드 중 생긴 `signing/` 때문에 한 번 막혔다).
+- 기존 devphone01 설치본은 debug 키 서명이라 새 키 APK로 `--install`하면 위 메시지로 멈춘다. 갱신하려면 uninstall이 필요하고 rootfs가 지워진다.
+- architecture §9 한 줄 제안(아키텍트 몫): "빌드는 `bash scripts/phone/build-apk.sh [--skip-tests] [--install]` 하나로 한다. 깨끗한 트리, 환경 복구, 단위 테스트, 소유자 키 서명과 인증서 검증까지 하고 로그는 `artifacts/paseo-phone-build.log`(사용법: core/core-rootfs.md)."
 
 ## 통합 빌드
 
