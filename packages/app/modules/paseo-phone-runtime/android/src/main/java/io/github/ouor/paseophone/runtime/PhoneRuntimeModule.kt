@@ -34,6 +34,7 @@ class PhoneRuntimeModule : Module() {
 
     AsyncFunction("start") Coroutine { -> bridge { RuntimeController.start() } }
     AsyncFunction("stop") Coroutine { -> bridge { RuntimeController.stop() } }
+    AsyncFunction("restartLinux") Coroutine { -> bridge { RuntimeController.restartLinux() } }
     AsyncFunction("restartDaemon") Coroutine { -> bridge { RuntimeController.restartDaemon() } }
     AsyncFunction("retrySetup") Coroutine { -> bridge { RuntimeController.retrySetup() } }
     AsyncFunction("startPrevious") Coroutine { -> bridge { RuntimeController.startPrevious() } }

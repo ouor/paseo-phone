@@ -174,6 +174,13 @@ object RuntimeController : RuntimeService.Listener {
 
   suspend fun stop() = accept { stopLinux(userInitiated = true) }
 
+  /** Stop then start as one command; also picks up a new exchange-folder bind. */
+  suspend fun restartLinux() =
+    accept {
+      stopLinux(userInitiated = false)
+      startOrSetup()
+    }
+
   suspend fun restartDaemon() =
     accept {
       if (phase != Phase.Ready || !linux.active) return@accept startOrSetup()

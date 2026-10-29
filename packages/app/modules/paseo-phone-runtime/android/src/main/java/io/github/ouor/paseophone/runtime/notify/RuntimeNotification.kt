@@ -47,7 +47,7 @@ object RuntimeNotification {
         .setShowWhen(false)
         .setOngoing(true)
         .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
-        .setContentIntent(deepLink(context, hostPath(null), 0))
+        .setContentIntent(deepLink(context, hostPath(null, null), 0))
     when (view) {
       is View.Setup -> {
         val title = if (view.update) R.string.linux_notif_updating else R.string.linux_notif_setting_up
@@ -74,7 +74,7 @@ object RuntimeNotification {
         builder
           .setContentTitle(context.getString(R.string.linux_notif_not_responding))
           .setContentText(context.getString(R.string.linux_notif_not_responding_text))
-          .setContentIntent(deepLink(context, hostPath(view.serverId) + "?logs=daemon", 1))
+          .setContentIntent(deepLink(context, hostPath(view.serverId, "logs=daemon"), 1))
           .setOngoing(false)
           .addAction(0, context.getString(R.string.linux_notif_action_restart), actionIntent(ACTION_RESTART_DAEMON))
       is View.Running -> {
@@ -93,12 +93,15 @@ object RuntimeNotification {
         builder
           .setContentTitle(context.getString(R.string.linux_notif_running))
           .setContentText(text)
-          .setContentIntent(deepLink(context, hostPath(view.serverId), 0))
-          .addAction(
+          .setContentIntent(deepLink(context, hostPath(view.serverId, null), 0))
+        // Without a serverId there is no host page to confirm on, so no Stop action.
+        if (view.serverId != null) {
+          builder.addAction(
             0,
             context.getString(R.string.linux_notif_action_stop),
-            deepLink(context, hostPath(view.serverId) + "?confirmStop=1", 2),
+            deepLink(context, hostPath(view.serverId, "confirmStop=1"), 2),
           )
+        }
         if (view.sshEnabled && lines.size > 1) {
           builder.setStyle(NotificationCompat.BigTextStyle().bigText(lines.joinToString("\n") + awake))
         }
@@ -109,7 +112,10 @@ object RuntimeNotification {
 
   const val ACTION_RESTART_DAEMON = "io.github.ouor.paseophone.runtime.RESTART_DAEMON"
 
-  private fun hostPath(serverId: String?): String = if (serverId == null) "" else "settings/hosts/${Uri.encode(serverId)}"
+  // `settings/hosts/<id>` redirects to Connections and drops the query; `/host` is the host page itself.
+  // Without a serverId the link only opens the app.
+  private fun hostPath(serverId: String?, query: String?): String =
+    if (serverId == null) "" else "settings/hosts/${Uri.encode(serverId)}/host" + (query?.let { "?$it" } ?: "")
 
   private fun deepLink(context: Context, path: String, requestCode: Int): PendingIntent {
     val intent =

@@ -12,6 +12,7 @@ interface PhoneRuntimeNativeModule {
   ): EventSubscription;
   start(): Promise<void>;
   stop(): Promise<void>;
+  restartLinux(): Promise<void>;
   restartDaemon(): Promise<void>;
   retrySetup(): Promise<void>;
   startPrevious(): Promise<void>;
@@ -99,6 +100,11 @@ export function start(): Promise<void> {
 
 export function stop(): Promise<void> {
   return call((m) => m.stop());
+}
+
+/** Stop then start in one serialized command. Resolves once accepted; progress arrives as state. */
+export function restartLinux(): Promise<void> {
+  return call((m) => m.restartLinux());
 }
 
 export function restartDaemon(): Promise<void> {

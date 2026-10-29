@@ -37,23 +37,24 @@ UI는 `modules/paseo-phone-runtime/index.ts`만 import한다. 타입은 `src/typ
 
 ### 2.2 함수와 resolve 시점
 
-| 함수                                  | resolve 시점     | 비고                                                                                              |
-| ------------------------------------- | ---------------- | ------------------------------------------------------------------------------------------------- |
-| `getState()`                          | 동기             | 네이티브 싱글턴의 최신 스냅샷. JS 리로드 후에도 그대로                                            |
-| `addStateListener(fn)`                | —                | 값이 바뀔 때만 호출. 다운로드 진행률은 최대 4회/초                                                |
-| `start()`                             | **접수 즉시**    | 미설치 → 설치, 버전 다름 → 업데이트, 그 외 → Linux 시작. 이미 starting/running이면 아무것도 안 함 |
-| `stop()`                              | 접수 즉시        | 데몬 → sshd 순서. `desired: "stopped"` 저장(다음 앱 실행 때 자동 시작 안 함)                      |
-| `restartDaemon()`                     | 접수 즉시        | 데몬 proot만. Linux가 멈춰 있으면 `start()`와 같다                                                |
-| `retrySetup()`                        | 접수 즉시        | `setup-failed`일 때만 동작, 실패한 단계부터                                                       |
-| `startPrevious()`                     | 접수 즉시        | `setup-failed && canStartPrevious`가 아니면 `not-installed`로 reject                              |
-| `reinstall()`                         | 접수 즉시        | 정지 → `paths.deleteRootfs()`(링크를 따라가지 않음) → install 처음부터. 교환 폴더는 유지          |
-| `setSshEnabled(b)`, `setKeepAwake(b)` | **적용 후**      | `state.json` 저장. Linux 실행 중이면 sshd 시작/정지, wake lock 획득/해제                          |
-| `openBatterySettings()`               | 화면을 연 뒤     | 실패 시 배터리 최적화 목록 화면                                                                   |
-| `requestStoragePermission()`          | 화면을 연 뒤     | "모든 파일 접근" 화면. 돌아오면 상태가 자동 갱신된다(아래)                                        |
-| `requestNotificationPermission()`     | 사용자가 답한 뒤 | `true` = 알림 허용. Android 12 이하는 다이얼로그 없이 현재 값                                     |
-| `openExchangeFolder()`                | 화면을 연 뒤     | DocumentsUI `Paseo` 폴더, 안 되면 저장소 루트. 둘 다 없으면 `io-error`                            |
-| `listAuthorizedKeys()` 등 키 3종      | 파일 쓰기 후     | `busy` 대상 아님. 미설치면 `not-installed`                                                        |
-| `getLogs(kind, maxBytes?)`            | 읽은 뒤          | 기본 64 KB 꼬리. 잘린 첫 줄은 버림. 파일이 없으면 `contents: ""`. `path`는 Android 절대 경로      |
+| 함수                                  | resolve 시점     | 비고                                                                                                                                           |
+| ------------------------------------- | ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `getState()`                          | 동기             | 네이티브 싱글턴의 최신 스냅샷. JS 리로드 후에도 그대로                                                                                         |
+| `addStateListener(fn)`                | —                | 값이 바뀔 때만 호출. 다운로드 진행률은 최대 4회/초                                                                                             |
+| `start()`                             | **접수 즉시**    | 미설치 → 설치, 버전 다름 → 업데이트, 그 외 → Linux 시작. 이미 starting/running이면 아무것도 안 함                                              |
+| `stop()`                              | 접수 즉시        | 데몬 → sshd 순서. `desired: "stopped"` 저장(다음 앱 실행 때 자동 시작 안 함)                                                                   |
+| `restartDaemon()`                     | 접수 즉시        | 데몬 proot만. Linux가 멈춰 있으면 `start()`와 같다                                                                                             |
+| `restartLinux()`                      | 접수 즉시        | 정지 → 시작을 한 명령으로(같은 `busy` 규칙). `desired`는 바꾸지 않는다. 멈춰 있으면 `start()`와 같다. 교환 폴더 `restart-required` 해소에 쓴다 |
+| `retrySetup()`                        | 접수 즉시        | `setup-failed`일 때만 동작, 실패한 단계부터                                                                                                    |
+| `startPrevious()`                     | 접수 즉시        | `setup-failed && canStartPrevious`가 아니면 `not-installed`로 reject                                                                           |
+| `reinstall()`                         | 접수 즉시        | 정지 → `paths.deleteRootfs()`(링크를 따라가지 않음) → install 처음부터. 교환 폴더는 유지                                                       |
+| `setSshEnabled(b)`, `setKeepAwake(b)` | **적용 후**      | `state.json` 저장. Linux 실행 중이면 sshd 시작/정지, wake lock 획득/해제                                                                       |
+| `openBatterySettings()`               | 화면을 연 뒤     | 실패 시 배터리 최적화 목록 화면                                                                                                                |
+| `requestStoragePermission()`          | 화면을 연 뒤     | "모든 파일 접근" 화면. 돌아오면 상태가 자동 갱신된다(아래)                                                                                     |
+| `requestNotificationPermission()`     | 사용자가 답한 뒤 | `true` = 알림 허용. Android 12 이하는 다이얼로그 없이 현재 값                                                                                  |
+| `openExchangeFolder()`                | 화면을 연 뒤     | DocumentsUI `Paseo` 폴더, 안 되면 저장소 루트. 둘 다 없으면 `io-error`                                                                         |
+| `listAuthorizedKeys()` 등 키 3종      | 파일 쓰기 후     | `busy` 대상 아님. 미설치면 `not-installed`                                                                                                     |
+| `getLogs(kind, maxBytes?)`            | 읽은 뒤          | 기본 64 KB 꼬리. 잘린 첫 줄은 버림. 파일이 없으면 `contents: ""`. `path`는 Android 절대 경로                                                   |
 
 "접수 즉시"인 명령의 결과(성공, 실패)는 상태 이벤트로만 온다. Promise reject는 접수 거부(`busy`, `not-installed`, `unavailable`)뿐이다. 설치는 몇 분 걸리고 그 사이 JS가 리로드될 수 있어서 이렇게 했다.
 
@@ -159,18 +160,18 @@ ready: stopped ─start─▶ starting ─데몬 HTTP 응답─▶ running ─st
 
 채널 `linux_runtime`(LOW), 알림 ID 하나. 서비스가 사는 동안만 있다.
 
-| 상태                             | 제목 / 본문                                                | 진행                                       | 액션 / 탭                                                                                            |
-| -------------------------------- | ---------------------------------------------------------- | ------------------------------------------ | ---------------------------------------------------------------------------------------------------- |
-| setup(install)                   | Setting up Linux / `{단계} · {n}%`(다운로드), 그 외 단계명 | 다운로드는 결정형, 그 외 비결정형          | 탭 `paseo-phone://`                                                                                  |
-| setup(update)                    | Updating Linux / 단계명                                    | 비결정형                                   | 탭 `paseo-phone://`                                                                                  |
-| setup-failed                     | Linux setup failed / Tap to see what went wrong            | 없음. 쓸어 지울 수 있음, 서비스는 종료     | 탭 `paseo-phone://`                                                                                  |
-| linux starting / stopping        | Starting Linux / Stopping Linux                            | 비결정형                                   | 탭 `paseo-phone://`                                                                                  |
-| running                          | Running / `ssh <주소>:2222 · Awake`, SSH off, No network   | 없음. 주소 2개면 확장 시 둘 다(Wi-Fi 우선) | 탭 `paseo-phone://settings/hosts/<serverId>`, **Stop** → `…/settings/hosts/<serverId>?confirmStop=1` |
-| running + 데몬 not-responding    | Daemon is not responding / Tap to open logs                | 없음. 쓸어 지울 수 있음                    | 탭 `…/settings/hosts/<serverId>?logs=daemon`, **Restart** → 앱을 열지 않고 `restartDaemon()`         |
-| stopped, error(restart-limit 등) | 알림 없음(서비스 종료)                                     |                                            |                                                                                                      |
+| 상태                             | 제목 / 본문                                                | 진행                                       | 액션 / 탭                                                                                                              |
+| -------------------------------- | ---------------------------------------------------------- | ------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------- |
+| setup(install)                   | Setting up Linux / `{단계} · {n}%`(다운로드), 그 외 단계명 | 다운로드는 결정형, 그 외 비결정형          | 탭 `paseo-phone://`                                                                                                    |
+| setup(update)                    | Updating Linux / 단계명                                    | 비결정형                                   | 탭 `paseo-phone://`                                                                                                    |
+| setup-failed                     | Linux setup failed / Tap to see what went wrong            | 없음. 쓸어 지울 수 있음, 서비스는 종료     | 탭 `paseo-phone://`                                                                                                    |
+| linux starting / stopping        | Starting Linux / Stopping Linux                            | 비결정형                                   | 탭 `paseo-phone://`                                                                                                    |
+| running                          | Running / `ssh <주소>:2222 · Awake`, SSH off, No network   | 없음. 주소 2개면 확장 시 둘 다(Wi-Fi 우선) | 탭 `paseo-phone://settings/hosts/<serverId>/host`, **Stop** → `…/host?confirmStop=1`(serverId를 모르면 Stop 액션 없음) |
+| running + 데몬 not-responding    | Daemon is not responding / Tap to open logs                | 없음. 쓸어 지울 수 있음                    | 탭 `…/settings/hosts/<serverId>/host?logs=daemon`, **Restart** → 앱을 열지 않고 `restartDaemon()`                      |
+| stopped, error(restart-limit 등) | 알림 없음(서비스 종료)                                     |                                            |                                                                                                                        |
 
 - 알림 권한이 없을 때 서비스가 시작되면 Android가 알림을 버린다. 서비스가 마지막 알림과 표시 여부를 기억하고, 컨트롤러가 상태를 발행할 때마다(앱 포그라운드 복귀, 30초 주기 포함) 권한이 새로 생겼으면 `startForeground`로 다시 올린다.
-- `serverId`를 아직 모르면 경로 부분 없이 `paseo-phone://` (+쿼리)로 연다.
+- 링크는 `/host`로 끝난다. `settings/hosts/<id>`는 업스트림이 Connections로 리다이렉트하면서 쿼리를 버린다. `serverId`를 아직 모르면 쿼리 없이 `paseo-phone://`로 앱만 연다.
 - UI가 처리할 쿼리: `confirmStop=1`(Linux 섹션의 Stop 확인 대화상자를 띄움), `logs=daemon`(데몬 로그를 보여줌). expo-router가 받는다.
 
 ## 3. 아키텍처와 다른 점과 이유
