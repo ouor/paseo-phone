@@ -117,7 +117,7 @@ class SetupRunner(context: Context, private val paths: LinuxPaths) {
     if (mode == SetupMode.INSTALL) {
       val free = StatFs(paths.root.path).availableBytes
       if (free < REQUIRED_FREE_BYTES) {
-        throw StepFailure("no-space", "Need ${gb(REQUIRED_FREE_BYTES)} free, ${gb(free)} available")
+        throw StepFailure("no-space", "free ${gb(free)}, need ${gb(REQUIRED_FREE_BYTES)}")
       }
     }
     var offset = 0L
@@ -242,6 +242,6 @@ class SetupRunner(context: Context, private val paths: LinuxPaths) {
       return "$major.$minor.$patch"
     }
 
-    private fun gb(bytes: Long) = "%.1f GB".format(bytes / 1024.0 / 1024.0 / 1024.0)
+    private fun gb(bytes: Long) = String.format(java.util.Locale.ROOT, "%.1f GB", bytes / 1024.0 / 1024.0 / 1024.0)
   }
 }

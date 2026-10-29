@@ -97,13 +97,13 @@ class SetupRunner(context, paths) {
 
 ### 오류 코드 (`SetupResult.Failed.code`)
 
-| code             | 언제                                                                                                      |
-| ---------------- | --------------------------------------------------------------------------------------------------------- |
-| `no-space`       | 사전 검사 4 GB 미만, 또는 예외 메시지에 `ENOSPC`/`No space left`                                          |
-| `offline`        | `UnknownHostException`, `ConnectException`, `SocketTimeoutException`, `SSLException`                      |
-| `checksum`       | sha256 불일치(부분 파일 삭제), `SHASUMS256.txt`에 Node 파일이 없음                                        |
-| `command-failed` | 스크립트가 0이 아닌 값으로 끝남(메시지 = 마지막 stderr 줄, 없으면 `<script> exited with N`) 또는 타임아웃 |
-| `unknown`        | 그 밖(예: 이전 단계 산출물이 없음 → "retry from download"). 메시지는 예외 메시지                          |
+| code             | 언제                                                                                                                        |
+| ---------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `no-space`       | 사전 검사 4 GB 미만(메시지 `free 2.1 GB, need 4.0 GB` 형식, 소수점은 항상 `.`), 또는 예외 메시지에 `ENOSPC`/`No space left` |
+| `offline`        | `UnknownHostException`, `ConnectException`, `SocketTimeoutException`, `SSLException`                                        |
+| `checksum`       | sha256 불일치(부분 파일 삭제), `SHASUMS256.txt`에 Node 파일이 없음                                                          |
+| `command-failed` | 스크립트가 0이 아닌 값으로 끝남(메시지 = 마지막 stderr 줄, 없으면 `<script> exited with N`) 또는 타임아웃                   |
+| `unknown`        | 그 밖(예: 이전 단계 산출물이 없음 → "retry from download"). 메시지는 예외 메시지                                            |
 
 스크립트 안 apt·npm의 네트워크 실패는 구분할 수 없어 `command-failed`다.
 
