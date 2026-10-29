@@ -194,7 +194,10 @@ export function RemoteAccessSection({ state, serverId }: { state: ReadyState; se
   const sshCommand = address ? buildSshCommand(host, port) : "—";
   const desktopUri = address ? buildDesktopSshUri(host, port) : "—";
   const sshConfig = buildSshConfig(toSshHostAlias(hostLabel), host || "<address>", port);
-  const fingerprints = state.ssh.hostKeyFingerprints.join("\n") || "—";
+  // A current OpenSSH client negotiates ed25519 first; listing every key type buried the one to match.
+  const hostKeys = state.ssh.hostKeyFingerprints;
+  const fingerprints =
+    hostKeys.find((entry) => entry.startsWith("ssh-ed25519")) ?? hostKeys[0] ?? "—";
 
   return (
     <SettingsSection
