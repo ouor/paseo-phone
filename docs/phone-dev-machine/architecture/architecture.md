@@ -214,7 +214,7 @@ proot-distro 5.10.3의 `login` 인자와 같게 만든다.
 - **업데이트 판정:** 서비스 시작 때 디스크의 데몬 버전 ≠ `PASEO_DAEMON_VERSION` → `UPDATE_DAEMON`(`paseo`). Node 버전 ≠ `NODE_VERSION` → `UPDATE_NODE`(`download` → Node만 `usr/local`에 다시 풀기 → `paseo`). 업데이트 후 `start`.
 - **`canStartPrevious`:** `UPDATE_DAEMON` 실패는 true(npm이 실패해도 이전 패키지는 남는다). `UPDATE_NODE`는 `download` 단계 실패일 때만 true. Node를 풀기 시작한 뒤에는 이전 데몬이 돈다는 보장이 없다.
 - apt 패키지와 에이전트 CLI 업그레이드는 앱이 하지 않는다. 사용자가 터미널에서 한다.
-- 실측(devphone01): `packages` 156초(119개), `paseo` 154초. 설치 후 rootfs 약 2.36 GB, 설치 중 순간 최대 3.3 GB. 사전 검사 4 GB는 이 최대값에 여유를 둔 값이다.
+- 실측(devphone01): `packages` 156초(119개), `paseo` 154초. 설치 후 rootfs 약 2.36 GB, 설치 중 순간 최대 3.3 GB. QA 2차: 첫 설치 약 6분, Reset Linux(Reinstall) 약 5.5분. 사전 검사 4 GB는 이 최대값에 여유를 둔 값이다.
 
 ---
 
@@ -522,7 +522,6 @@ packages/app/src/phone/
   linux-section.android.tsx, logs-sheet.android.tsx
   remote-access-section.android.tsx, authorized-keys-sheet.android.tsx
   exchange-section.android.tsx
-  linux-stopped-callout-source.android.tsx
   format.ts (+ format.test.ts)                 # SSH 문자열, 주소 선택, 용량 표기. 순수 함수
   i18n/en.json, i18n/ko.json, i18n/register.ts (+ register.test.ts)
 ```
@@ -535,6 +534,7 @@ packages/app/src/phone/
   - `ready`이고 `linux`가 `error`이며 이 기기 호스트가 레지스트리에 없을 때(첫 설치 직후 실패) → `LinuxSetupScreen`의 실패 레이아웃으로 오류·로그·`restartLinux()`와 "다른 호스트로 계속"을 보여 준다. Welcome으로 떨어져 Linux 화면에 갈 길이 없어지는 것을 막는다.
   - 그 외(사용자가 멈춤 포함)는 `AppShell`.
 - **알림 의도 처리:** `confirmStop`은 `running`뿐 아니라 `starting`에서도 확인 대화상자를 연다.
+- Linux 멈춤·오류는 Host 페이지의 Linux 섹션과 알림에서만 보인다. 사이드바 콜아웃은 두지 않는다(업스트림 네이티브 사이드바가 콜아웃을 그리지 않는다).
 - 설치 화면 로그는 `linuxSetup.logs.*` 키를 쓰고 로드 오류를 보여 준다. `no-space` 문구는 `space` 숫자로 그린다.
 
 ### 7.4 알림
@@ -581,7 +581,7 @@ packages/app/src/phone/
 ### 8.2 시작·정지와 경쟁 규칙
 
 - **서비스 시작:** 설치·업데이트·시작은 모두 먼저 서비스를 확보한다(`ensureService()`). 정지 중인 인스턴스가 있으면 그 `onDestroy`가 끝날 때까지 기다린 뒤 새로 시작한다. 정지를 시작하는 순간 그 인스턴스는 "현재 인스턴스"에서 빠진다. `onServiceDestroyed`는 자기가 현재 인스턴스일 때만 상태를 바꾼다.
-- **서비스를 내리는 경우는 둘뿐:** 사용자 `stop()`과 설치 실패(`setup-failed`). `restartLinux`, `restartDaemon`, `reinstall`, 업데이트는 서비스를 유지한 채 프로세스만 바꾼다.
+- **서비스를 내리는 경우:** 사용자 `stop()`, 설치 실패(`setup-failed`), Linux 수준 오류(`linux`가 `error("restart-limit")`/`error("start-failed")`). 오류 상태에서는 감독할 프로세스가 없으므로 FGS·wake lock을 들고 있을 이유가 없고, Restart가 `ensureService()`로 다시 확보한다. `restartLinux`, `restartDaemon`, `reinstall`, 업데이트는 서비스를 유지한 채 프로세스만 바꾼다.
 - **초기화(앱 시작):** 디스크 판정(§2.3) 뒤 항상 상태를 정한다. `ABSENT`/`EXTRACTED`는 `failedStep`이 기록돼 있으면 `setup-failed`(Retry 대기), 아니면 설치를 시작한다(`desired`와 무관). `INSTALLED`는 `desired == "running"`이면 `linux: starting`으로 발행하고 시작, 아니면 `ready(stopped)`. `checking`에 머무는 경로는 없다.
 - **`stop()` 의미:** 설치되지 않았으면 `desired`를 바꾸지 않는다. 진행 중인 설치를 취소하면 `setup-failed(code: "cancelled")`(Retry로 이어하기), 시작 중이면 `ready(stopped)`. 백오프 대기 중이면 재시작 작업을 취소한다.
 - **준비 대기는 `busy` 밖:** 시작 명령은 프로세스를 띄우고 바로 끝난다. 120초 준비 대기는 감시 작업이 하고 상태로만 알린다.
@@ -621,17 +621,10 @@ devphone01: 2026-10-30 02:56 KST에 adb로 `settings put global settings_enable_
 
 ## 9. 빌드 노트 (core 개발자)
 
-- 빌드 스크립트: `scripts/phone/build-apk.sh`(bash). `scripts/build-apk.mjs`는 Windows에서 `npm`/`gradlew`를 셸 없이 spawn해서 실패하므로 같은 순서를 bash로 따른다:
-  ```bash
-  export APP_VARIANT=phone EXPO_PUBLIC_LOCAL_DAEMON=127.0.0.1:6767 PASEO_WATCHDOG_BUILD=1
-  npm run build:app-deps
-  (cd packages/app && npx expo prebuild --platform android --no-install --clean)
-  rm -rf packages/app/android/app/build/generated/assets
-  (cd packages/app/android && ./gradlew :paseo-phone-runtime:testReleaseUnitTest assembleRelease --no-daemon \
-      --max-workers=2 -Dorg.gradle.parallel=false -PreactNativeArchitectures=arm64-v8a)
-  cp packages/app/android/app/build/outputs/apk/release/app-release.apk artifacts/paseo-phone-arm64.apk
-  ```
+- 빌드는 `bash scripts/phone/build-apk.sh [--skip-tests] [--install]` 하나로 한다. 깨끗한 트리, 환경 복구, 단위 테스트, 소유자 키 서명과 인증서 검증까지 하고 로그는 `artifacts/paseo-phone-build.log`(사용법: [core/core-rootfs.md](../core/core-rootfs.md)). `scripts/build-apk.mjs`는 Windows에서 실패하므로 쓰지 않는다.
+- 서명 파일은 `signing/`에 있다(비밀 부분은 git-ignore, [signing/SIGNING.md](../../../signing/SIGNING.md)). APK는 `assembleRelease` 뒤에 `apksigner`로 서명한다. 생성된 Gradle 파일을 고쳐서 서명하지 않는다.
 - **Kotlin 단위 테스트는 APK를 만들 때마다 같은 Gradle 호출에서 돈다.** 테스트가 실패하면 APK가 나오지 않는다. CI는 1차 범위 밖이다. 업스트림 워크플로는 건드리지 않는다.
+- **릴리스 태그는 `phone-v<업스트림 버전>-<n>`**(예: `phone-v0.14.0-1`). `v*` 태그는 쓰지 않는다. 포크에서 업스트림 릴리스 워크플로가 돈다. QA를 통과할 때까지 GitHub pre-release로 둔다.
 - TS 테스트: `npx vitest run packages/app/modules/paseo-phone-runtime/src/state-schema.test.ts packages/app/src/phone --bail=1`.
 - Gradle 빌드 캐시는 `~/.gradle/gradle.properties`에서 켜져 있다.
 - npm 11은 허용 목록에 없는 install script를 건너뛴다. `react-native-enriched-markdown`의 postinstall은 Windows bsdtar(`C:\Windows\System32\tar.exe`)가 필요하다. 이를 피하려고 `package.json`을 고치지 않는다.
