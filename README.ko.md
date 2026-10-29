@@ -1,187 +1,141 @@
 <p align="center">
-  <img src="packages/website/public/logo.svg" width="64" height="64" alt="Paseo 로고">
+  <img src="packages/website/public/logo.svg" width="64" height="64" alt="Paseo logo">
 </p>
 
-<h1 align="center">Paseo</h1>
+<h1 align="center">Paseo Phone</h1>
 
 <p align="center">
   <a href="README.md">English</a> ·
-  <a href="README.zh-CN.md">简体中文</a> ·
-  <a href="README.ja.md">日本語</a> ·
   <a href="README.ko.md">한국어</a>
 </p>
 
 <p align="center">
-  <a href="https://github.com/getpaseo/paseo/stargazers">
-    <img src="https://img.shields.io/github/stars/getpaseo/paseo?style=flat&logo=github" alt="GitHub stars">
+  <a href="https://github.com/ouor/paseo/releases">
+    <img src="https://img.shields.io/github/v/release/ouor/paseo?include_prereleases&style=flat&logo=github" alt="Release">
   </a>
-  <a href="https://github.com/getpaseo/paseo/releases">
-    <img src="https://img.shields.io/github/v/release/getpaseo/paseo?style=flat&logo=github" alt="GitHub release">
-  </a>
-  <a href="https://x.com/moboudra">
-    <img src="https://img.shields.io/badge/%40moboudra-555?logo=x" alt="X">
-  </a>
-  <a href="https://discord.gg/jz8T2uahpH">
-    <img src="https://img.shields.io/badge/Discord-555?logo=discord" alt="Discord">
-  </a>
-  <a href="https://www.reddit.com/r/PaseoAI/">
-    <img src="https://img.shields.io/badge/Reddit-555?logo=reddit" alt="Reddit">
+  <a href="https://github.com/getpaseo/paseo">
+    <img src="https://img.shields.io/badge/upstream-getpaseo%2Fpaseo-555?logo=github" alt="Upstream Paseo">
   </a>
 </p>
 
-<p align="center">Claude Code, Codex, Copilot, OpenCode, Pi 에이전트를 위한 하나의 인터페이스</p>
+Paseo Phone은 안드로이드 폰 하나를 개발 머신으로 만듭니다. 폰 안에서 Debian, [Paseo](https://github.com/getpaseo/paseo) 데몬, 코딩 에이전트가 돌아갑니다. 폰 앱이 에이전트 UI이고, 데스크톱은 폰에 접속하는 단말입니다. Paseo의 개인용 포크이며 GitHub Releases로만 배포합니다.
 
-<p align="center">
-  <img src="https://paseo.sh/hero-mockup.png" alt="Paseo app screenshot" width="100%">
-</p>
+구조: 앱이 proot로 Debian 13을 루트 없이 올립니다. 포그라운드 서비스가 Paseo 데몬(`127.0.0.1:6767`)과 sshd(포트 `2222`)를 계속 띄워 둡니다. 폰의 Paseo 앱은 페어링 없이 이 데몬을 "이 기기"로 봅니다. 데스크톱은 SSH로 접속합니다.
 
-<p align="center">
-  <img src="https://paseo.sh/mobile-mockup.png" alt="Paseo mobile app" width="100%">
-</p>
+업스트림 Paseo는 데스크톱, 모바일, 웹, CLI용 오픈 소스 에이전트 개발 환경입니다. Claude Code, Codex, Copilot, OpenCode, Pi, Antigravity, Muse Code 에이전트를 한 인터페이스로 다룹니다. Paseo Phone은 Claude Code, Codex, OpenCode를 설치합니다.
 
-내 컴퓨터에서 에이전트를 병렬로 실행하세요. 데스크톱이나 휴대폰에서 배포하세요.
+## 요구 사항
 
-- **셀프 호스팅:** 에이전트는 완전한 개발 환경이 갖춰진 내 컴퓨터에서 실행됩니다. 평소 쓰던 도구, 설정, 스킬을 그대로 쓸 수 있습니다.
-- **여러 제공자 지원:** Claude Code, Codex, Copilot, OpenCode, Pi를 하나의 인터페이스에서 사용할 수 있습니다. 작업마다 알맞은 모델을 고를 수 있습니다.
-- **음성 제어:** 음성 모드에서 작업을 말로 지시하거나 문제를 음성으로 함께 검토할 수 있습니다. 손을 쓰지 않고 작업해야 할 때 유용합니다.
-- **여러 기기 지원:** iOS, Android, 데스크톱, 웹, CLI를 지원합니다. 데스크톱에서 시작해 휴대폰으로 확인하고 터미널에서 자동화할 수 있습니다.
-- **개인정보 보호 우선:** Paseo는 텔레메트리, 추적, 강제 로그인을 사용하지 않습니다.
+- arm64 안드로이드 폰. 다른 ABI는 빌드하지 않습니다.
+- 여유 공간 약 4 GB. 설치 전에 4 GB를 확인하고, 설치 중 최대 약 3.3 GB, 설치 후 약 2.4 GB를 씁니다.
+- phantom process killer 끄기. 켜져 있으면 안드로이드가 데몬, sshd, proot를 죽입니다. adb가 있는 컴퓨터에서:
 
-## 스폰서
+  ```bash
+  adb shell settings put global settings_enable_monitor_phantom_procs false
+  ```
 
-<!-- Sponsors: one cell per sponsor in the order of packages/website/src/data/sponsors.ts, then "become a sponsor" cells up to three. -->
-<table>
-  <tr>
-    <td align="center" width="33%"><a href="https://hoplite.sh/?utm_source=paseo&utm_medium=readme&utm_campaign=sponsor"><picture><source media="(prefers-color-scheme: dark)" srcset="packages/website/public/sponsors/hoplite-on-dark.svg"><img src="packages/website/public/sponsors/hoplite-on-light.svg" alt="Hoplite" height="40"></picture></a><br><sub>Cloud coding agents</sub></td>
-    <td align="center" width="33%"><a href="https://paseo.sh/sponsor">Paseo 스폰서 되기</a></td>
-    <td align="center" width="33%"><a href="https://paseo.sh/sponsor">Paseo 스폰서 되기</a></td>
-  </tr>
-</table>
+- 권장: 화면이 꺼져도 작업이 이어지도록 Paseo Phone을 배터리 최적화에서 제외하세요.
 
-## 시작하기
+앱은 두 설정을 감지해서 경고만 하고, 직접 바꾸지 않습니다.
 
-Paseo는 코딩 에이전트를 관리하는 로컬 서버인 데몬을 실행합니다. 데스크톱 앱, 모바일 앱, 웹 앱, CLI 같은 클라이언트가 이 데몬에 연결합니다.
+## 설치
 
-### 준비 사항
+1. [Releases](https://github.com/ouor/paseo/releases)에서 APK를 받으세요. 태그는 `phone-v<업스트림 버전>-<n>`입니다. 첫 릴리스는 `phone-v0.14.0-1`(arm64, 프리릴리스)입니다.
+2. 다른 키로 서명된 이전 빌드(초기 미서명/debug 빌드)가 있으면 먼저 삭제하세요. 그대로는 안드로이드가 업데이트를 거부합니다. 삭제하면 `/root` 아래 레포와 에이전트 로그인을 포함한 리눅스 환경이 지워집니다.
+3. APK를 설치하세요. 앱 이름은 "Paseo Phone"(`io.github.ouor.paseophone`)이고, 일반 Paseo 앱과 따로 설치됩니다.
 
-아래 에이전트 CLI 중 하나 이상을 설치하고 인증 정보를 설정해야 합니다.
+## 첫 실행
 
-- [Claude Code](https://docs.anthropic.com/en/docs/claude-code)
-- [Codex](https://github.com/openai/codex)
-- [GitHub Copilot](https://github.com/features/copilot/cli/)
-- [OpenCode](https://github.com/anomalyco/opencode)
-- [Pi](https://pi.dev)
+앱을 여세요. Debian, Node.js, Paseo 데몬, 에이전트 CLI를 받아 설치합니다. 약 6분 걸리고 네트워크가 필요합니다. 단계가 실패하면 화면에 오류와 설치 로그가 나오고, **다시 시도**는 실패한 단계부터 이어 갑니다.
 
-### 데스크톱 앱(권장)
+설치가 끝나면 앱이 "이 기기" 호스트로 열립니다. 리눅스 관련 기능은 **설정 › 호스트 › 이 기기 › Host**에 있습니다.
 
-[paseo.sh/download](https://paseo.sh/download) 또는 [GitHub 릴리스 페이지](https://github.com/getpaseo/paseo/releases)에서 다운로드하세요. 앱을 열면 데몬이 자동으로 시작됩니다. 별도로 설치할 것은 없습니다.
+- **Linux**: 시작/멈추기, 데몬 상태와 재시작, SSH 서버 스위치, 화면 꺼짐 유지 스위치, 로그.
+- **Remote access**: 접속 주소(Wi-Fi 또는 Tailscale), `ssh` 명령, Paseo 데스크톱 URI, SSH config, 호스트 키 지문, 허용된 키.
+- **Exchange folder**: 폴더 열기, 리눅스 경로 복사.
+- **Reset Linux**: Debian 다시 설치. 데몬 server ID, SSH 호스트 키, 허용된 키는 유지하고 나머지 `/root`는 지웁니다.
 
-휴대폰에서 연결하려면 **설정 → 호스트 → 기기 페어링**을 여세요.
+상시 알림에 상태가 나오고, **Stop**과 로그 링크가 있습니다.
 
-### CLI / 헤드리스 환경
+## 에이전트 로그인
 
-CLI를 설치하고 Paseo를 시작하세요.
+에이전트 로그인은 폰의 셸에서 합니다. SSH로 접속한 뒤(다음 섹션) 실행하세요.
 
-```bash
-npm install -g @getpaseo/cli
-paseo
-```
+| 에이전트    | 명령                                         | 비고                                                              |
+| ----------- | -------------------------------------------- | ----------------------------------------------------------------- |
+| Claude Code | `claude` 실행 후 `/login`                    | proot에는 브라우저가 없습니다. 출력된 URL을 다른 기기에서 여세요. |
+| Codex       | `codex login --device-auth`                  |                                                                   |
+| OpenCode    | `opencode auth login` (TUI에서는 `/connect`) | 프로바이더별 API 키 또는 OAuth.                                   |
 
-Paseo가 로컬에서 시작된 뒤 기기 페어링을 위한 종단 간 암호화 릴레이를 켤지 묻습니다. 거절하면 TCP, Tailscale 또는 다른 VPN으로 직접 연결할 수 있습니다. 이 방식은 서버나 원격 머신에서 유용합니다.
+Codex 샌드박스는 proot에서 동작하지 않습니다. Codex 에이전트는 **Full Access**를 고르세요. `/root/.claude/CLAUDE.md`, `/root/.codex/AGENTS.md`, `/root/.config/opencode/AGENTS.md`에 쓰는 전역 에이전트 지침에도 적혀 있습니다.
 
-자세한 설치와 설정은 아래 문서를 참고하세요.
+## 데스크톱에서 접속
 
-- [문서](https://paseo.sh/docs)
-- [연결 가이드](https://paseo.sh/docs/connectivity)
-- [설정 레퍼런스](https://paseo.sh/docs/configuration)
+sshd는 공개키만 받고, 사용자 `root`, 포트 `2222`, IPv4만 엽니다. 같은 Wi-Fi나 Tailscale을 쓰세요.
 
-### Docker
+1. **Remote access › 허용된 키**에 데스크톱의 공개키를 붙여 넣으세요.
+2. 터미널에서 한 번 접속해 호스트 키를 받아들이세요. 앱에 나온 지문과 비교하세요.
 
-Docker에서 Paseo 데몬과 셀프 호스팅 웹 UI를 실행하세요:
+   ```bash
+   ssh -p 2222 root@<폰 주소>
+   ```
 
-```bash
-docker run -d --name paseo \
-  -p 6767:6767 \
-  -e PASEO_PASSWORD=change-me \
-  -v "$PWD/paseo-home:/home/paseo" \
-  -v "$PWD:/workspace" \
-  ghcr.io/getpaseo/paseo:latest
-```
+3. Paseo 데스크톱: **Remote access**의 URI(`ssh://root@<폰 주소>:2222`)로 Remote SSH 호스트를 추가하세요. 데몬은 loopback에만 열려 있어서 데스크톱 Paseo는 항상 SSH로 붙습니다. 처음 보는 호스트 키는 거부하므로 2단계를 먼저 합니다.
+4. VS Code: **Remote access**의 SSH config를 `~/.ssh/config`에 넣고 Remote-SSH로 접속하세요.
 
-컨테이너가 시작되면 `http://localhost:6767`을 여세요. 사용하는 에이전트 CLI를 기본 이미지에 추가한 뒤, 환경 변수나 영구 `/home/paseo` 볼륨으로 인증 정보를 설정하세요. 자세한 내용은 [Docker 문서](docs/docker.md)를 참고하세요.
+데몬에는 비밀번호도 릴레이도 없습니다. 폰에서 `127.0.0.1:6767`에 닿는 것은 다른 앱을 포함해 무엇이든 데몬을 쓸 수 있습니다.
 
-## CLI
+## 교환 폴더
 
-앱에서 할 수 있는 모든 작업은 터미널에서도 할 수 있습니다.
+폰의 `/storage/emulated/0/Paseo`가 리눅스의 `/root/exchange`에 마운트됩니다. 리눅스와 다른 앱 사이에 파일을 옮길 때 쓰세요. 레포는 `/root` 아래에 두세요.
+
+- "모든 파일 접근" 권한이 필요합니다. 이 권한은 앱 전체에 붙으므로 리눅스 안의 모든 프로그램이 공유 저장소 전체를 읽고, 쓰고, 지울 수 있습니다. 기본은 꺼져 있습니다.
+- 권한을 준 뒤에는 앱의 안내에 따라 리눅스를 재시작하세요.
+- 심볼릭 링크, 하드 링크, 실행 비트는 동작하지 않습니다.
+
+## 소스에서 빌드
 
 ```bash
-paseo run --provider claude/opus-4.6 "implement user authentication"
-paseo run --provider codex/gpt-5.4 --worktree feature-x "implement feature X"
-
-paseo ls                           # 실행 중인 에이전트 목록
-paseo attach abc123                # 실시간 출력 스트리밍
-paseo send abc123 "also add tests" # 후속 작업 전송
-
-# 원격 데몬에서 실행
-paseo --host workstation.local:6767 run "run the full test suite"
+bash scripts/phone/build-apk.sh [--skip-tests] [--install] [--device <serial>]
 ```
 
-자세한 내용은 [전체 CLI 레퍼런스](https://paseo.sh/docs/cli)를 참고하세요.
+깨끗한 작업 트리가 필요합니다. arm64 release APK를 빌드하고, 모듈 단위 테스트를 돌리고, 소유자의 release 키로 서명하고, 인증서를 검증합니다. 결과물은 `artifacts/paseo-phone-arm64.apk`, 전체 로그는 `artifacts/paseo-phone-build.log`입니다. `--install`은 서명이 다르면 삭제하지 않고 멈춥니다.
 
-## 스킬
+서명 파일(`signing/release.p12`, `signing/keystore.properties`)은 소유자의 것이고 레포에 없습니다. 없으면 빌드가 처음에 실패합니다. 직접 빌드하려면 자기 키를 쓰고 스크립트의 기대 인증서 해시를 바꾸세요.
 
-스킬은 에이전트가 Paseo를 통해 다른 에이전트를 오케스트레이션하는 방법을 알려 줍니다.
+## 업스트림 따라가기
 
-```bash
-npx skills add getpaseo/paseo
-```
+이 포크는 업스트림 Paseo 릴리스를 따라가고, 업스트림으로 다시 합치지 않습니다. 새 업스트림 릴리스로 옮기려면 그 태그를 머지하고 [architecture §4.3](docs/phone-dev-machine/architecture/architecture.md)의 머지 체크리스트를 확인하세요. 포크가 업스트림 파일에 넣은 줄에는 `phone-fork:` 표시가 있습니다. `rg -n "phone-fork:" packages/app scripts`로 확인하세요.
 
-그런 다음 어떤 에이전트 대화에서든 아래 명령을 사용할 수 있습니다.
+데몬은 `packages/server/package.json` 버전의 공개 `@getpaseo/cli`이고, Node.js는 `.tool-versions`를 따릅니다. 머지 후 앱이 다음 시작 때 폰에서 둘을 업데이트합니다. 에이전트 CLI와 apt 패키지는 자동으로 업그레이드하지 않습니다.
 
-- `/paseo-handoff` — 에이전트 간에 작업을 넘깁니다. Claude로 계획을 세운 뒤 Codex에 구현을 넘길 때 이 기능을 씁니다.
-- `/paseo-advisor` — 작업 자체를 넘기지 않고, 에이전트 하나를 조언자로 띄워 두 번째 의견을 받습니다.
-- `/paseo-committee` — 서로 다른 관점의 에이전트 두 개로 위원회를 구성해, 한 발 물러나 근본 원인을 분석하고 계획을 세웁니다.
+## 제한과 하지 않는 것
 
-## 개발
+- arm64만, Debian만. 앱에 리눅스 터미널 화면은 없습니다. SSH를 쓰세요.
+- proot에서는 파일 작업이 훨씬 느립니다. 무거운 빌드(안드로이드 Gradle 빌드 등)는 범위 밖입니다.
+- 외부 서버, 클라우드, Paseo 릴레이를 통한 접속은 없습니다. 데몬 비밀번호나 LAN에 노출된 데몬도 없습니다.
+- 공유 저장소에서의 레포 작업, 양방향 동기화는 없습니다.
+- Play 스토어 배포, 일반 사용자용 온보딩, CI는 없습니다.
+- 부팅 시 자동 시작은 없습니다. 에이전트 CLI와 apt 패키지 업그레이드는 직접 합니다.
+- 원격 푸시 알림은 없습니다(Firebase 없음).
 
-모노레포 패키지 구성은 다음과 같습니다.
+## 문서
 
-- `packages/server`: Paseo 데몬(에이전트 프로세스 오케스트레이션, WebSocket API, MCP 서버 제공)
-- `packages/app`: Expo 클라이언트(iOS, Android, 웹)
-- `packages/cli`: `paseo` CLI(데몬과 에이전트 워크플로)
-- `packages/desktop`: Electron 데스크톱 앱
-- `packages/relay`: 데몬과 클라이언트가 쓰는 릴레이 전송 및 암호화 패키지
-- `packages/website`: 마케팅 사이트 및 문서(`paseo.sh`)
+설계와 진행 문서는 [docs/phone-dev-machine/](docs/phone-dev-machine/)에 있습니다.
 
-자주 쓰는 명령:
+- [original-plan.md](docs/phone-dev-machine/original-plan.md): 무엇을, 왜, 하지 않을 것
+- [architecture/architecture.md](docs/phone-dev-machine/architecture/architecture.md): 결정, 포트, 경로, 머지 체크리스트
+- [architecture/spike-report.md](docs/phone-dev-machine/architecture/spike-report.md): proot에서의 에이전트, phantom process killer, 속도
+- [core/core-rootfs.md](docs/phone-dev-machine/core/core-rootfs.md): 설치 스크립트, 빌드 스크립트, 용량
+- [ui/ui.md](docs/phone-dev-machine/ui/ui.md): 앱에서 각 기능의 위치
+- [qa/qa-report.md](docs/phone-dev-machine/qa/qa-report.md): QA 결과
 
-```bash
-# 모든 로컬 개발 서비스 실행
-npm run dev
+업스트림 Paseo 문서는 [paseo.sh/docs](https://paseo.sh/docs)에 있습니다.
 
-# 개별 환경 실행
-npm run dev:server
-npm run dev:app
-npm run dev:desktop
-npm run dev:website
+## 크레딧과 라이선스
 
-# 서버 스택 빌드
-npm run build:server
+- [Paseo](https://github.com/getpaseo/paseo), Mohamed Boudra: 데몬, 앱, 에이전트 연동. 이 포크는 Paseo 릴리스를 따라갑니다.
+- [Kai](https://github.com/SimonSchubert/Kai), Simon Schubert: 리눅스 레이어(proot 빌드와 런타임 코드)를 Kai에서 옮겨 왔습니다.
+- [termux/proot](https://github.com/termux/proot), [termux/proot-distro](https://github.com/termux/proot-distro): proot와 Debian 루트 파일시스템.
 
-# 레포 전체 검사 실행
-npm run typecheck
-```
-
-## Paseo 후원하기
-
-Paseo는 한 사람이 개발하며, 사용하는 분들의 후원으로 운영됩니다. [GitHub Sponsors](https://github.com/sponsors/boudra)로 후원할 수 있습니다. 회사는 매월 [Paseo를 후원](https://paseo.sh/sponsor#spot)하고 로고를 이 README 상단과 paseo.sh 홈페이지 및 문서에 게재할 수 있습니다.
-
-## 관련 프로젝트
-
-- [getpaseo/paseo-relay](https://github.com/getpaseo/paseo-relay) — Elixir로 작성한 공식 분산형 릴레이
-- [paseo-skins](https://github.com/huangguang1999/paseo-skins) — 커뮤니티 테마와 Agent Skill을 제공하고, 코드 수정 없이 쓸 수 있는 데스크톱 테마 로더
-- [paseo-vscode](https://marketplace.visualstudio.com/items?itemName=hinnes.paseo-vscode) — VS Code 확장 프로그램
-
-## 라이선스
-
-Apache-2.0
+Paseo는 Apache-2.0 라이선스입니다. [LICENSE](LICENSE)를 보세요. Kai는 Apache-2.0, PRoot는 GPL-2.0, talloc은 LGPL-3.0입니다. 자세한 내용과 출처는 [THIRD_PARTY_NOTICES.md](packages/app/modules/paseo-phone-runtime/THIRD_PARTY_NOTICES.md)에 있습니다.

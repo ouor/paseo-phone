@@ -2,231 +2,140 @@
   <img src="packages/website/public/logo.svg" width="64" height="64" alt="Paseo logo">
 </p>
 
-<h1 align="center">Paseo</h1>
+<h1 align="center">Paseo Phone</h1>
 
 <p align="center">
   <a href="README.md">English</a> ·
-  <a href="README.zh-CN.md">简体中文</a> ·
-  <a href="README.ja.md">日本語</a> ·
   <a href="README.ko.md">한국어</a>
 </p>
 
 <p align="center">
-  <a href="https://github.com/getpaseo/paseo/stargazers">
-    <img src="https://img.shields.io/github/stars/getpaseo/paseo?style=flat&logo=github" alt="GitHub stars">
+  <a href="https://github.com/ouor/paseo/releases">
+    <img src="https://img.shields.io/github/v/release/ouor/paseo?include_prereleases&style=flat&logo=github" alt="Release">
   </a>
-  <a href="https://github.com/getpaseo/paseo/releases">
-    <img src="https://img.shields.io/github/v/release/getpaseo/paseo?style=flat&logo=github" alt="GitHub release">
-  </a>
-  <a href="https://x.com/moboudra">
-    <img src="https://img.shields.io/badge/%40moboudra-555?logo=x" alt="X">
-  </a>
-  <a href="https://discord.gg/jz8T2uahpH">
-    <img src="https://img.shields.io/badge/Discord-555?logo=discord" alt="Discord">
-  </a>
-  <a href="https://www.reddit.com/r/PaseoAI/">
-    <img src="https://img.shields.io/badge/Reddit-555?logo=reddit" alt="Reddit">
+  <a href="https://github.com/getpaseo/paseo">
+    <img src="https://img.shields.io/badge/upstream-getpaseo%2Fpaseo-555?logo=github" alt="Upstream Paseo">
   </a>
 </p>
 
-<p align="center">One interface for Claude Code, Codex, Copilot, OpenCode, Pi, Antigravity, and Muse Code agents.</p>
+Paseo Phone turns one Android phone into your dev machine. The phone runs Debian, the [Paseo](https://github.com/getpaseo/paseo) daemon, and your coding agents. The phone app is the agent UI, and a desktop is a terminal that connects to the phone. It is a personal fork of Paseo, distributed only through GitHub Releases.
 
-<p align="center">
-  <img src="https://paseo.sh/hero-mockup.png" alt="Paseo app screenshot" width="100%">
-</p>
+Structure: the app runs Debian 13 under proot (no root). A foreground service keeps the Paseo daemon (`127.0.0.1:6767`) and sshd (port `2222`) running. The Paseo app on the phone sees the daemon as "this device" without pairing. A desktop connects over SSH.
 
-<p align="center">
-  <img src="https://paseo.sh/mobile-mockup.png" alt="Paseo mobile app" width="100%">
-</p>
+Upstream Paseo is an open source agentic development environment for desktop, mobile, web, and CLI. It runs Claude Code, Codex, Copilot, OpenCode, Pi, Antigravity, and Muse Code agents through one interface. Paseo Phone installs Claude Code, Codex, and OpenCode.
 
-Paseo is an open source agentic development environment for desktop, mobile, web, and CLI. Open the desktop app and work: agents, editor, terminals, diffs, pull requests, and a browser in one window. Run many agents at once, each in its own worktree, on one machine or several. The mobile app is the full app, native on iOS and Android.
+## Requirements
 
-- **Parallel agents:** Run many agents at once, each in its own worktree.
-- **Built-in orchestration:** Agents in Paseo can create worktrees, launch other agents, and talk to them, across providers.
-- **Complete development workflow:** Edit files, review diffs, open pull requests, and run terminals, in split panes you arrange how you want.
-- **Self-hosted:** Agents run on your machine with your full dev environment. Use your tools, your configs, and your skills.
-- **Multi-provider:** Claude Code, Codex, Copilot, OpenCode, Pi, Antigravity, and Muse Code through the same interface. Pick the right model for each job.
-- **Voice control:** Dictate tasks or talk through problems in voice mode. Hands-free when you need it.
-- **Cross-device:** iOS, Android, desktop, web, and CLI. Start work at your desk, check in from your phone, script it from the terminal.
-- **Privacy-first:** Paseo doesn't have any telemetry, tracking, or forced log-ins.
+- An arm64 Android phone. No other ABI is built.
+- About 4 GB free storage. Setup checks for 4 GB, peaks near 3.3 GB, and leaves about 2.4 GB.
+- The phantom process killer turned off. With it on, Android kills the daemon, sshd, and proot. From a computer with adb:
 
-[Run parallel tasks in Paseo](https://paseo.sh/docs/parallel-development): start agents in separate worktrees, review their diffs, run each app, and check it in the built-in browser.
+  ```bash
+  adb shell settings put global settings_enable_monitor_phantom_procs false
+  ```
 
-## Sponsors
+- Recommended: exempt Paseo Phone from battery optimization so work continues with the screen off.
 
-<!-- Sponsors: one cell per sponsor in the order of packages/website/src/data/sponsors.ts, then "become a sponsor" cells up to three. -->
-<table>
-  <tr>
-    <td align="center" width="33%"><a href="https://hoplite.sh/?utm_source=paseo&utm_medium=readme&utm_campaign=sponsor"><picture><source media="(prefers-color-scheme: dark)" srcset="packages/website/public/sponsors/hoplite-on-dark.svg"><img src="packages/website/public/sponsors/hoplite-on-light.svg" alt="Hoplite" height="56"></picture></a><br><sub>Cloud coding agents</sub></td>
-    <td align="center" width="33%"><a href="https://paseo.sh/sponsor">Become a sponsor</a></td>
-    <td align="center" width="33%"><a href="https://paseo.sh/sponsor">Become a sponsor</a></td>
-  </tr>
-</table>
+The app detects both settings and warns you. It does not change them.
 
-## Plugins
+## Install
 
-Plugins run on the daemon and show up in every client you connect, with the same UI on desktop, web,
-iOS, and Android. Write a plugin once and it is on your phone.
+1. Download the APK from [Releases](https://github.com/ouor/paseo/releases). Tags are `phone-v<upstream version>-<n>`. The first is `phone-v0.14.0-1` (arm64, pre-release).
+2. If you have an older build signed with a different key (the early unsigned/debug builds), uninstall it first. Android refuses the update otherwise. Uninstalling deletes the Linux environment, including repos and agent logins under `/root`.
+3. Install the APK. The app is "Paseo Phone" (`io.github.ouor.paseophone`) and installs next to the regular Paseo app.
 
-- **UI:** screens, sidebar items, workspace panels, Command Center items, slash commands, composer pills, attachment sources, timeline items, themes.
-- **Agent lifecycle:** change configuration, environment, and MCP servers, answer permissions, follow up when a turn ends.
-- **Providers:** add a coding agent as a provider.
+## First run
 
-Install from the registry with `paseo plugin add owner/slug`, or from Git or a local directory.
+Open the app. It downloads and sets up Debian, Node.js, the Paseo daemon, and the agent CLIs. This takes about 6 minutes and needs a network connection. If a step fails, the screen shows the error and the setup log, and **Retry** resumes from the failed step.
 
-**[Browse plugins](https://paseo.sh/plugins)** · **[Plugin docs](https://paseo.sh/docs/plugins)**
+When setup ends, the app opens on the "this device" host. Linux controls live in **Settings › Hosts › this device › Host**:
 
-Plugins run with access to your daemon machine and inside connected clients; install only code you trust.
+- **Linux**: start/stop, daemon status and restart, SSH server switch, keep-awake switch, logs.
+- **Remote access**: address (Wi-Fi or Tailscale), `ssh` command, Paseo desktop URI, SSH config, host key fingerprint, authorized keys.
+- **Exchange folder**: open the folder, copy the Linux path.
+- **Reset Linux**: reinstall Debian. It keeps the daemon server ID, SSH host keys, and authorized keys. The rest of `/root` is deleted.
 
-## Getting Started
+The persistent notification shows status and has **Stop** and a link to the logs.
 
-Paseo runs a local server called the daemon that manages your coding agents. Clients like the desktop app, mobile app, web app, and CLI connect to it.
+## Log in to agents
 
-### Prerequisites
+Agent logins happen in a shell on the phone. Connect over SSH (next section), then run:
 
-You need at least one agent CLI installed and configured with your credentials:
+| Agent       | Command                                   | Note                                                                  |
+| ----------- | ----------------------------------------- | --------------------------------------------------------------------- |
+| Claude Code | `claude`, then `/login`                   | There is no browser in proot. Open the printed URL on another device. |
+| Codex       | `codex login --device-auth`               |                                                                       |
+| OpenCode    | `opencode auth login` (`/connect` in TUI) | API key or OAuth, per provider.                                       |
 
-- [Claude Code](https://docs.anthropic.com/en/docs/claude-code)
-- [Codex](https://github.com/openai/codex)
-- [GitHub Copilot](https://github.com/features/copilot/cli/)
-- [OpenCode](https://github.com/anomalyco/opencode)
-- [Pi](https://pi.dev)
-- [Antigravity](https://paseo.sh/docs/supported-providers#antigravity)
-- [Muse Code](https://paseo.sh/docs/muse-code)
+Codex's sandbox does not work under proot. Pick **Full Access** for Codex agents. The global agent instructions written to `/root/.claude/CLAUDE.md`, `/root/.codex/AGENTS.md`, and `/root/.config/opencode/AGENTS.md` say this too.
 
-### Desktop app (recommended)
+## Connect from a desktop
 
-Download it from [paseo.sh/download](https://paseo.sh/download) or the [GitHub releases page](https://github.com/getpaseo/paseo/releases). Open the app and the daemon starts automatically. Nothing else to install.
+sshd accepts public keys only, as `root` on port `2222`, over IPv4. Use the same Wi-Fi or Tailscale.
 
-To connect from your phone, open **Settings → your host → Pair Device**.
+1. In **Remote access › Authorized keys**, paste your desktop's public key.
+2. Connect once from a terminal to accept the host key. Compare it with the fingerprint shown in the app.
 
-### Server
+   ```bash
+   ssh -p 2222 root@<phone address>
+   ```
 
-For a server, a VM, or any machine without the desktop app. Install the CLI and start the daemon:
+3. Paseo desktop: add a Remote SSH host with the URI from **Remote access** (`ssh://root@<phone address>:2222`). The daemon listens only on loopback, so desktop Paseo always connects through SSH. It refuses unknown host keys, which is why step 2 comes first.
+4. VS Code: copy the SSH config from **Remote access** into `~/.ssh/config` and connect with Remote-SSH.
 
-```bash
-npm install -g @getpaseo/cli
-paseo
-```
+The daemon has no password and no relay. Anything that reaches `127.0.0.1:6767` on the phone, including other apps, can use it.
 
-Paseo starts, then asks whether to enable the end-to-end encrypted relay for device pairing. If you decline, connect directly over TCP, Tailscale, or another VPN. The desktop, mobile, and web apps connect to this daemon like any other host.
+## Exchange folder
 
-For full setup and configuration, see:
+`/storage/emulated/0/Paseo` on the phone is mounted at `/root/exchange` in Linux. Use it to move files between Linux and other apps. Keep repos under `/root`.
 
-- [Docs](https://paseo.sh/docs)
-- [Connectivity guide](https://paseo.sh/docs/connectivity)
-- [Configuration reference](https://paseo.sh/docs/configuration)
+- It needs the "All files access" permission. That permission covers the whole app, so every program in Linux can read, write, and delete all of shared storage. It is off by default.
+- After granting it, restart Linux from the prompt in the app.
+- Symlinks, hard links, and the executable bit do not work there.
 
-### Docker
-
-Run the Paseo daemon and self-hosted web UI in Docker:
+## Build from source
 
 ```bash
-docker run -d --name paseo \
-  -p 6767:6767 \
-  -e PASEO_PASSWORD=change-me \
-  -v "$PWD/paseo-home:/home/paseo" \
-  -v "$PWD:/workspace" \
-  ghcr.io/getpaseo/paseo:latest
+bash scripts/phone/build-apk.sh [--skip-tests] [--install] [--device <serial>]
 ```
 
-Open `http://localhost:6767` after it starts. Extend the base image with the agent CLIs you use, then provide credentials through environment variables or the persistent `/home/paseo` volume. See the [Docker documentation](docs/docker.md) for full setup details.
+It requires a clean working tree, builds the arm64 release APK, runs the module unit tests, signs with the owner's release key, and checks the certificate. Output is `artifacts/paseo-phone-arm64.apk`, the full log `artifacts/paseo-phone-build.log`. `--install` stops instead of uninstalling when the signature differs.
 
-## CLI
+The signing files (`signing/release.p12`, `signing/keystore.properties`) are the owner's and are not in the repo. Without them the build fails at the start. For your own build, use your own key and change the expected certificate hash in the script.
 
-Everything you can do in the app, you can do from the terminal.
+## Staying current with upstream
 
-```bash
-paseo run --provider claude/opus-4.6 "implement user authentication"
-paseo run --provider codex/gpt-5.5 --worktree feature-x "implement feature X"
+This fork tracks upstream Paseo releases and is never merged back. To move to a new upstream release, merge its tag and walk the merge checklist in [architecture §4.3](docs/phone-dev-machine/architecture/architecture.md). The fork's edits to upstream files are marked `phone-fork:`; check them with `rg -n "phone-fork:" packages/app scripts`.
 
-paseo ls                           # list running agents
-paseo attach abc123                # stream live output
-paseo send abc123 "also add tests" # follow-up task
+The daemon is the public `@getpaseo/cli` at the version in `packages/server/package.json`, and Node.js follows `.tool-versions`. After a merge, the app updates both on the phone at the next start. Agent CLIs and apt packages are not upgraded automatically.
 
-# run on a remote daemon; --cwd is a path on that host
-paseo run --host workstation.local:6767 --cwd /workspace "run the full test suite"
-```
+## Limitations and non-goals
 
-See the [full CLI reference](https://paseo.sh/docs/cli) for more.
+- arm64 only, Debian only. No Linux terminal screen in the app; use SSH.
+- File operations are much slower under proot. Heavy builds (such as Android Gradle builds) are out of scope.
+- No access through outside servers, cloud hosts, or the Paseo relay. No daemon password or LAN-exposed daemon.
+- No repo work in shared storage and no two-way sync.
+- No Play Store release, no onboarding for general users, no CI.
+- No start on boot. Agent CLIs and apt packages are upgraded by you.
+- No remote push notifications (no Firebase).
 
-## TypeScript SDK
+## Docs
 
-Build issue integrations, dashboards, and orchestration services with `@getpaseo/client`:
+Design and process docs are in [docs/phone-dev-machine/](docs/phone-dev-machine/) (Korean):
 
-```ts
-import { createPaseoClient } from "@getpaseo/client";
+- [original-plan.md](docs/phone-dev-machine/original-plan.md): what and why, non-goals
+- [architecture/architecture.md](docs/phone-dev-machine/architecture/architecture.md): decisions, ports, paths, merge checklist
+- [architecture/spike-report.md](docs/phone-dev-machine/architecture/spike-report.md): agents under proot, phantom process killer, speed
+- [core/core-rootfs.md](docs/phone-dev-machine/core/core-rootfs.md): setup scripts, build script, sizes
+- [ui/ui.md](docs/phone-dev-machine/ui/ui.md): where each feature lives in the app
+- [qa/qa-report.md](docs/phone-dev-machine/qa/qa-report.md): QA results
 
-const client = createPaseoClient({ url: "ws://127.0.0.1:6767/ws" });
-await client.connect();
+Upstream Paseo docs are at [paseo.sh/docs](https://paseo.sh/docs).
 
-const agent = await client.agents.create({
-  config: { provider: "codex/gpt-5.5" },
-  cwd: "/Users/me/dev/storefront",
-  prompt: "Review the current diff and name the riskiest change.",
-});
+## Credits and license
 
-const result = await agent.waitForFinish();
-console.log(result.lastMessage);
+- [Paseo](https://github.com/getpaseo/paseo) by Mohamed Boudra: the daemon, app, and agent integrations. This fork follows its releases.
+- [Kai](https://github.com/SimonSchubert/Kai) by Simon Schubert: the Linux layer (proot build and runtime code) is ported from Kai.
+- [termux/proot](https://github.com/termux/proot) and [termux/proot-distro](https://github.com/termux/proot-distro): proot and the Debian root filesystem.
 
-await client.close();
-```
-
-See the [SDK quickstart](https://paseo.sh/docs/sdk/quickstart), [recipes](https://paseo.sh/docs/sdk/recipes), and [API reference](https://paseo.sh/docs/sdk/reference).
-
-## Skills
-
-Skills teach your agent to use Paseo to orchestrate other agents.
-
-```bash
-npx skills add getpaseo/paseo
-```
-
-Then use them in any agent conversation:
-
-- `/paseo-handoff` — hand off work between agents. I use this to plan with Claude and then handoff to Codex to implement.
-- `/paseo-advisor` — spin up a single agent as an advisor for a second opinion, without delegating the work itself.
-- `/paseo-committee` — form a committee of two contrasting agents to step back, do root cause analysis, and produce a plan.
-
-## Development
-
-Quick monorepo package map:
-
-- `packages/server`: Paseo daemon (agent process orchestration, WebSocket API, MCP server)
-- `packages/app`: Expo client (iOS, Android, web)
-- `packages/cli`: `paseo` CLI for daemon and agent workflows
-- `packages/desktop`: Electron desktop app
-- `packages/relay`: Relay transport and encryption used by the daemon and clients
-- `packages/website`: Marketing site and documentation (`paseo.sh`)
-
-Common commands:
-
-```bash
-# run all local dev services
-npm run dev
-
-# run individual surfaces
-npm run dev:server
-npm run dev:app
-npm run dev:desktop
-npm run dev:website
-
-# build the server stack
-npm run build:server
-
-# repo-wide checks
-npm run typecheck
-```
-
-## Support Paseo
-
-Paseo is an independent project used by tens of thousands of developers daily, built by one person and funded by the people who use it. Support the work on [GitHub Sponsors](https://github.com/sponsors/boudra). Companies can [sponsor Paseo](https://paseo.sh/sponsor#spot) monthly and have their logo shown at the top of this README and on the paseo.sh homepage and docs.
-
-## Related projects
-
-- [getpaseo/paseo-relay](https://github.com/getpaseo/paseo-relay) — official distributed relay, written in Elixir
-- [paseo-vscode](https://marketplace.visualstudio.com/items?itemName=hinnes.paseo-vscode) — VS Code extension
-
-## License
-
-Apache-2.0
+Paseo is licensed under Apache-2.0; see [LICENSE](LICENSE). Kai is Apache-2.0, PRoot is GPL-2.0, and talloc is LGPL-3.0. Details and sources are in [THIRD_PARTY_NOTICES.md](packages/app/modules/paseo-phone-runtime/THIRD_PARTY_NOTICES.md).
