@@ -112,3 +112,35 @@ e: .../runtime/ssh/HostKeys.kt:12:58 Unsupported escape sequence.         Regex(
 빌드 스크립트 자체 버그 하나를 고쳤다: Windows `node`는 Git Bash 경로(`/c/...`)를 `require`하지 못해 버전 확인에서 바로 죽었다. 레포 루트로 `cd`한 뒤 상대 경로로 읽는다.
 
 참고: `--clean` prebuild는 `packages/app/android/`를 phone 변형으로 다시 만든다. 이후 다른 변형을 빌드할 때도 `--clean`이 필요하다.
+
+### 2회차: 성공 (core-runtime `c62fcc8d0` 포함)
+
+`BUILD SUCCESSFUL in 8m 56s`. 산출물 `artifacts/paseo-phone-arm64.apk` 113 MB. release 빌드라 `debuggable`이 아니다(`run-as` 불가). 그래서 스모크는 logcat, `ps`, `ss`, PC 쪽 ssh, quick-qa로만 봤다.
+
+## 통합 스모크 (2026-10-30, devphone01)
+
+`adb install -r` 후 `am start` 한 번(04:03:39). 화면 탭 없이 컨트롤러가 설치를 시작했다.
+
+| 확인                                       | 결과              | 근거                                                                                                                                                                                                                                                                                               |
+| ------------------------------------------ | ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 단계 진행                                  | 통과              | `ps`(20초 간격): 04:04:08 `packages.sh` → 04:06:10 `paseo.sh`(04:08:34부터 npm) → 04:09:15 sshd → 04:09:35 `Paseo Daemon`/`Supervisor`. download·extract·configure는 첫 샘플(실행 후 29초) 전에 끝났다                                                                                             |
+| 전체 설치 시간                             | **약 6분**        | 실행 04:03:39 → `127.0.0.1:6767` LISTEN 04:09:35                                                                                                                                                                                                                                                   |
+| 데몬, 앱 uid(`u0_a194`) + core-linux proot | 통과              | `ss -ltn`: `127.0.0.1:6767` LISTEN. 프로세스는 `libproot.so` 아래. PC에서 `100.79.37.5:6767` 연결 안 됨                                                                                                                                                                                            |
+| sshd 2222, 키 인증만                       | 통과(부정 경로만) | `0.0.0.0:2222` LISTEN. 비밀번호/키보드 인증 → `Permission denied (publickey)`. 호스트 키 `SHA256:18FyJu8bHG0Zkp0YB0cGlndkqqy/zdVZJuJnou3ALcA`(ED25519). 키 로그인 성공 경로는 확인하지 않았다. 키 추가 UI가 아직 없고 `run-as`가 막혀 테스트 키를 넣을 방법이 없다. 그래서 추가한 테스트 키도 없다 |
+| 포그라운드 서비스                          | 통과              | `dumpsys activity services`: `RuntimeService isForeground=true foregroundId=6767 types=0x40000000(specialUse) channel=linux_runtime`                                                                                                                                                               |
+| 알림이 보임                                | **실패(관찰)**    | 아래 "발견" 1                                                                                                                                                                                                                                                                                      |
+| 페어링 없이 호스트 등록                    | 통과              | `[HostRuntime] configured bootstrap probe failed`가 10초 간격으로 04:09:31까지 이어진 뒤 데몬이 뜨자 등록됐다. 웰컴 화면에서 홈으로 넘어갔다. 설정 호스트 목록에 호스트 1개(연결됨, 초록 점)가 있다. 주소 표시는 `localhost:6767`                                                                  |
+| 호스트 이름이 기기 기반                    | 통과              | 호스트 라벨 `m2012k11ag`(= `Build.MODEL` `M2012K11AG` 소문자). `localhost`가 아니다                                                                                                                                                                                                                |
+
+### 발견 (다른 담당 파일, 고치지 않음)
+
+1. **알림 권한을 나중에 받으면 FGS 알림이 나타나지 않는다(core-runtime, `RuntimeService`/`notify/RuntimeNotification.kt`).** 첫 실행 때 `POST_NOTIFICATIONS`가 없는 상태로 `startForeground`가 불렸다. 이후 앱의 시스템 권한 대화상자가 떴지만 quick-qa 실행 중 응답 없이 사라졌다. 스모크를 위해 `pm grant io.github.ouor.paseophone android.permission.POST_NOTIFICATIONS`로 권한을 줬다(그대로 둠). 그 뒤에도 알림창에 Paseo Phone 알림이 없다. Android는 권한 없이 보낸 알림을 다시 그리지 않으므로, 권한을 받은 뒤 서비스가 알림을 다시 `notify`해야 한다. 예: `requestNotificationPermission()` 결과가 true일 때, 또는 상태가 바뀔 때마다.
+2. 참고, 버그 아님: Paseo 본체의 알림 권한 요청이 홈 화면 진입 때 바로 뜬다. 디자인이 정한 알림 권한 안내 시점과 겹치는지는 UI 단계에서 정한다.
+
+### 확인하지 않은 것
+
+- 키 로그인 성공, `ssh -W 127.0.0.1:6767`(데스크톱 Paseo 경로). 키 추가 UI가 생기면 QA에서 확인한다.
+- 첫 기동 로그의 `model-download` 유무(앱 파일에 접근할 수 없음). rootfs 단독 검증에서는 0건이었다.
+- 설치 용량(앱 내부 저장소라 `du` 불가). rootfs 단독 검증 수치를 참고한다.
+
+앱은 설치된 채로 실행 중이다(데몬·sshd 동작, UI 단계용).
