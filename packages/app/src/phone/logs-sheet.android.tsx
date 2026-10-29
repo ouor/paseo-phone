@@ -73,7 +73,15 @@ export function PhoneLogsSheet({
       scrollable={false}
       testID="phone-linux-logs-sheet"
     >
-      <ScrollView ref={scrollRef} onContentSizeChange={scrollToEnd} nestedScrollEnabled>
+      {/* Content can be measured before the sheet's viewport is (open animation, cached data), so
+          scroll again whenever the viewport is laid out. */}
+      <ScrollView
+        ref={scrollRef}
+        style={styles.scroll}
+        onContentSizeChange={scrollToEnd}
+        onLayout={scrollToEnd}
+        nestedScrollEnabled
+      >
         <View style={styles.sheetBody}>
           <SegmentedControl options={options} value={kind} onValueChange={onKindChange} size="sm" />
           <Text style={settingsStyles.rowHint} selectable>
@@ -94,6 +102,11 @@ export function PhoneLogsSheet({
 }
 
 const styles = StyleSheet.create((theme) => ({
+  // Same bounds as the sheet's own scroll body, so the log scrolls instead of growing the sheet.
+  scroll: {
+    flex: 1,
+    minHeight: 0,
+  },
   sheetBody: {
     gap: theme.spacing[3],
     paddingBottom: theme.spacing[2],
