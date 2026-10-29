@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <string name="linux_notif_channel_name">Linux 런타임</string>
+  <string name="linux_notif_running">실행 중</string>
+  <string name="linux_notif_ssh_address">ssh %1$s:%2$d</string>
+  <string name="linux_notif_ssh_address_labeled">ssh %1$s:%2$d (%3$s)</string>
+  <string name="linux_notif_awake_suffix">" · 깨어 있음"</string>
+  <string name="linux_notif_ssh_off">SSH 꺼짐</string>
+  <string name="linux_notif_no_network">네트워크 없음</string>
+  <string name="linux_notif_action_stop">정지</string>
+  <string name="linux_notif_action_restart">재시작</string>
+  <string name="linux_notif_setting_up">Linux 설치 중</string>
+  <string name="linux_notif_updating">Linux 업데이트 중</string>
+  <string name="linux_notif_step_percent">%1$s · %2$d%%</string>
+  <string name="linux_notif_setup_failed">Linux 설치 실패</string>
+  <string name="linux_notif_setup_failed_text">탭해서 원인 보기</string>
+  <string name="linux_notif_starting">Linux 시작 중</string>
+  <string name="linux_notif_stopping">Linux 정지 중</string>
+  <string name="linux_notif_not_responding">데몬이 응답하지 않습니다</string>
+  <string name="linux_notif_not_responding_text">탭해서 로그 열기</string>
+  <string name="linux_notif_wifi">Wi-Fi</string>
+  <string name="linux_notif_tailscale">Tailscale</string>
+  <string name="linux_step_download">Debian 다운로드</string>
+  <string name="linux_step_extract">압축 풀기</string>
+  <string name="linux_step_configure">설정</string>
+  <string name="linux_step_packages">패키지 설치</string>
+  <string name="linux_step_paseo">Paseo 설치</string>
+  <string name="linux_step_start">시작</string>
+  <string name="linux_error_killed_by_system">Android가 프로세스를 강제 종료했습니다. phantom process 제한 또는 메모리 부족일 수 있습니다.</string>
+  <string name="linux_error_crashed">프로세스가 예기치 않게 종료되었습니다 (종료 코드 %1$d).</string>
+  <string name="linux_error_not_responding">데몬이 127.0.0.1:6767에서 응답하지 않습니다.</string>
+  <string name="linux_error_restart_limit">5분 안에 재시작이 5번 실패해 멈췄습니다. 마지막 오류: %1$s</string>
+</resources>

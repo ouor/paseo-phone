@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <string name="linux_notif_channel_name">Linux runtime</string>
+  <string name="linux_notif_running">Running</string>
+  <string name="linux_notif_ssh_address">ssh %1$s:%2$d</string>
+  <string name="linux_notif_ssh_address_labeled">ssh %1$s:%2$d (%3$s)</string>
+  <string name="linux_notif_awake_suffix">" · Awake"</string>
+  <string name="linux_notif_ssh_off">SSH off</string>
+  <string name="linux_notif_no_network">No network</string>
+  <string name="linux_notif_action_stop">Stop</string>
+  <string name="linux_notif_action_restart">Restart</string>
+  <string name="linux_notif_setting_up">Setting up Linux</string>
+  <string name="linux_notif_updating">Updating Linux</string>
+  <string name="linux_notif_step_percent">%1$s · %2$d%%</string>
+  <string name="linux_notif_setup_failed">Linux setup failed</string>
+  <string name="linux_notif_setup_failed_text">Tap to see what went wrong</string>
+  <string name="linux_notif_starting">Starting Linux</string>
+  <string name="linux_notif_stopping">Stopping Linux</string>
+  <string name="linux_notif_not_responding">Daemon is not responding</string>
+  <string name="linux_notif_not_responding_text">Tap to open logs</string>
+  <string name="linux_notif_wifi">Wi-Fi</string>
+  <string name="linux_notif_tailscale">Tailscale</string>
+  <string name="linux_step_download">Download Debian</string>
+  <string name="linux_step_extract">Extract</string>
+  <string name="linux_step_configure">Configure</string>
+  <string name="linux_step_packages">Install packages</string>
+  <string name="linux_step_paseo">Install Paseo</string>
+  <string name="linux_step_start">Start</string>
+  <string name="linux_error_killed_by_system">Android force-stopped the process. This can be the phantom process limit or low memory.</string>
+  <string name="linux_error_crashed">The process exited unexpectedly (exit code %1$d).</string>
+  <string name="linux_error_not_responding">The daemon did not respond on 127.0.0.1:6767.</string>
+  <string name="linux_error_restart_limit">Stopped after 5 failed restarts in 5 minutes. Last error: %1$s</string>
+</resources>

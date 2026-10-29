@@ -1,0 +1,41 @@
+apply plugin: 'com.android.library'
+
+group = 'io.github.ouor.paseophone.runtime'
+version = '0.1.0'
+
+def expoModulesCorePlugin = new File(project(":expo-modules-core").projectDir.absolutePath, "ExpoModulesCorePlugin.gradle")
+apply from: expoModulesCorePlugin
+applyKotlinExpoModulesCorePlugin()
+useCoreDependencies()
+useDefaultAndroidSdkVersions()
+
+// Versions come from the repo so an upstream merge needs no hand-edited constant (architecture §3.1).
+def repoRoot = new File(projectDir, "../../../../..").canonicalFile
+def serverPackageJson = new File(repoRoot, "packages/server/package.json")
+def toolVersions = new File(repoRoot, ".tool-versions")
+if (!serverPackageJson.isFile() || !toolVersions.isFile()) {
+  throw new GradleException("paseo-phone-runtime: cannot find ${serverPackageJson} or ${toolVersions}")
+}
+def paseoDaemonVersion = new groovy.json.JsonSlurper().parse(serverPackageJson).version
+def nodeLine = toolVersions.readLines().collect { it.trim() }.find { it.startsWith("nodejs ") }
+if (paseoDaemonVersion == null || nodeLine == null) {
+  throw new GradleException("paseo-phone-runtime: missing server version or nodejs in .tool-versions")
+}
+def nodeVersion = nodeLine.split(/\s+/)[1]
+
+android {
+  namespace "io.github.ouor.paseophone.runtime"
+  buildFeatures {
+    buildConfig true
+  }
+  defaultConfig {
+    buildConfigField "String", "PASEO_DAEMON_VERSION", "\"${paseoDaemonVersion}\""
+    buildConfigField "String", "NODE_VERSION", "\"${nodeVersion}\""
+  }
+}
+
+dependencies {
+  // kotlinx-coroutines and androidx.core come as api dependencies of expo-modules-core (useCoreDependencies).
+  implementation "org.tukaani:xz:1.12" // rootfs and Node downloads are .tar.xz
+  testImplementation "junit:junit:4.13.2"
+}
