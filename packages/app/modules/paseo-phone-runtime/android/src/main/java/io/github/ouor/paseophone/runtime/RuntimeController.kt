@@ -570,9 +570,7 @@ object RuntimeController : RuntimeService.Listener {
     if (phase != Phase.Ready) return publish() // setup's start step reports the failure itself
 
     val now = SystemClock.elapsedRealtime()
-    m.failures.removeAll { now - it > RESTART_WINDOW_MS }
-    m.failures.addLast(now)
-    if (m.failures.size >= RESTART_LIMIT) {
+    if (recordFailure(m.failures, now)) {
       m.wanted = false
       m.state = Svc("error", "restart-limit", context.getString(R.string.linux_error_restart_limit, message))
       if (m === daemon) {
@@ -584,7 +582,7 @@ object RuntimeController : RuntimeService.Listener {
       return publish()
     }
     publish()
-    val backoff = minOf(1_000L shl (m.failures.size - 1), 60_000L)
+    val backoff = restartDelayMs(m.failures.size)
     m.restartJob?.cancel()
     m.restartJob =
       scope.launch {
@@ -592,6 +590,16 @@ object RuntimeController : RuntimeService.Listener {
         if (m.wanted && m.process == null && linux.active) launch(m)
       }
   }
+
+  /** Records a failure at [now] (elapsed ms); true when 5 failures fall within 5 minutes (architecture §8.3). */
+  internal fun recordFailure(failures: ArrayDeque<Long>, now: Long): Boolean {
+    failures.removeAll { now - it > RESTART_WINDOW_MS }
+    failures.addLast(now)
+    return failures.size >= RESTART_LIMIT
+  }
+
+  /** Delay before restarting after the [failures]-th recent failure: 1, 2, 4, 8, 16 s, capped at 60 s. */
+  internal fun restartDelayMs(failures: Int): Long = minOf(1_000L shl (failures - 1).coerceIn(0, 6), 60_000L)
 
   private suspend fun stopManaged(m: Managed, graceMs: Long) {
     m.wanted = false

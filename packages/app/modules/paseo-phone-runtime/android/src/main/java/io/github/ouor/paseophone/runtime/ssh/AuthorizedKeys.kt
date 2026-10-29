@@ -1,10 +1,10 @@
 package io.github.ouor.paseophone.runtime.ssh
 
 import android.system.Os
-import android.util.Base64
 import java.io.File
 import java.nio.ByteBuffer
 import java.security.MessageDigest
+import java.util.Base64
 
 /**
  * Reads and writes `rootfs/root/.ssh/authorized_keys` from the Android side (architecture §5.1).
@@ -54,6 +54,8 @@ class AuthorizedKeys(rootfs: File) {
   }
 
   companion object {
+    internal val WHITESPACE = Regex("""\s+""")
+
     private val KEY_TYPES =
       setOf(
         "ssh-ed25519",
@@ -70,13 +72,13 @@ class AuthorizedKeys(rootfs: File) {
       val trimmed = line.trim()
       if (trimmed.isEmpty() || trimmed.startsWith("#")) return null
       // shortcut: options containing quoted spaces before the key type are not tokenized exactly; fine for keys this app writes.
-      val tokens = trimmed.split(Regex("\s+"))
+      val tokens = trimmed.split(WHITESPACE)
       val typeIndex = tokens.indexOfFirst { it in KEY_TYPES }
       if (typeIndex < 0 || typeIndex + 1 >= tokens.size) return null
       val type = tokens[typeIndex]
       val blob =
         try {
-          Base64.decode(tokens[typeIndex + 1], Base64.DEFAULT)
+          Base64.getDecoder().decode(tokens[typeIndex + 1])
         } catch (_: IllegalArgumentException) {
           return null
         }
@@ -87,7 +89,7 @@ class AuthorizedKeys(rootfs: File) {
     /** OpenSSH `SHA256:` fingerprint of a raw public key blob. */
     fun fingerprint(blob: ByteArray): String {
       val digest = MessageDigest.getInstance("SHA-256").digest(blob)
-      return "SHA256:" + Base64.encodeToString(digest, Base64.NO_PADDING or Base64.NO_WRAP)
+      return "SHA256:" + Base64.getEncoder().withoutPadding().encodeToString(digest)
     }
 
     // The blob starts with a length-prefixed copy of the key type.

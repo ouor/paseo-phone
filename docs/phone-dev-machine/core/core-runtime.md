@@ -212,4 +212,4 @@ UI 개발자:
 
 - 통합 빌드 컴파일 오류는 이 경계부터 본다: Expo `AsyncFunction(...) Coroutine { -> }` 문법, `ServiceCompat.startForeground` 타입 인자, core-linux 시그니처.
 - QA에 넘길 확인 항목: 첫 실행 자동 설치, 앱을 나가도 설치 계속, 알림 Stop → 확인 대화상자, Restart 액션, phantom killer 켠 상태에서 `killed-by-system` 표시, 화면 꺼짐 30분 이상 SSH 응답성, 일반 Paseo APK에서 설치가 안 시작됨.
-- 단위 테스트 없음: `AuthorizedKeys.parse`와 백오프 계산은 테스트 대상이지만 `android/src/test/**`는 1라운드 소유 범위 밖이었다. 범위를 받으면 Robolectric 없이 돌도록 `android.util.Base64` 의존을 감싸서 추가한다.
+- 단위 테스트: `android/src/test/.../ssh/AuthorizedKeysTest.kt`(파서, 지문, 개인 키 거부), `RestartPolicyTest.kt`(백오프, 5분 5회 제한). `:paseo-phone-runtime:testReleaseUnitTest`로 돈다. 테스트가 JVM에서 돌도록 `android.util.Base64` 대신 `java.util.Base64`를 쓴다.
