@@ -14,7 +14,9 @@ import { settingsStyles } from "@/styles/settings";
 import { getLogs, type LogKind } from "../../modules/paseo-phone-runtime";
 
 const LOG_KINDS: readonly LogKind[] = ["daemon", "ssh", "setup"];
-const LOGS_SNAP_POINTS = ["70%", "92%"];
+// One full-height snap: at a lower snap the bottom of the log area is off-screen, so scroll-to-end
+// would still show old lines.
+const LOGS_SNAP_POINTS = ["92%"];
 
 /** Daemon, SSH and setup logs. Opened from the Linux section and from the setup screen. */
 export function PhoneLogsSheet({
