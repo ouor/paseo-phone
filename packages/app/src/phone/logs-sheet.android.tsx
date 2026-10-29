@@ -1,11 +1,11 @@
 import * as Clipboard from "expo-clipboard";
-import { useCallback, useMemo, useRef } from "react";
+import { useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import { Text, View, type ScrollView as NativeScrollView } from "react-native";
+import { Text, View, type ListRenderItem } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { AdaptiveModalSheet, type SheetHeader } from "@/components/adaptive-modal-sheet";
 import { Button } from "@/components/ui/button";
-import { ScrollView } from "@/components/ui/scroll-view";
+import { FlatList } from "@/components/ui/scroll-view";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { useToast } from "@/contexts/toast-api-context";
 import { useFetchQuery } from "@/data/query";
@@ -14,9 +14,15 @@ import { settingsStyles } from "@/styles/settings";
 import { getLogs, type LogKind } from "../../modules/paseo-phone-runtime";
 
 const LOG_KINDS: readonly LogKind[] = ["daemon", "ssh", "setup"];
-// One full-height snap: at a lower snap the bottom of the log area is off-screen, so scroll-to-end
-// would still show old lines.
+// One full-height snap: at a lower snap the bottom of the log list sits below the screen.
 const LOGS_SNAP_POINTS = ["92%"];
+
+const renderLine: ListRenderItem<string> = ({ item }) => (
+  <Text style={styles.logOutput} selectable dataSet={CODE_SURFACE_DATASET}>
+    {item}
+  </Text>
+);
+const lineKey = (_line: string, index: number) => String(index);
 
 /** Daemon, SSH and setup logs. Opened from the Linux section and from the setup screen. */
 export function PhoneLogsSheet({
@@ -56,9 +62,9 @@ export function PhoneLogsSheet({
     contents = t("settings.host.linux.logs.loadFailed", { message: logsQuery.error.message });
   } else if (logsQuery.data?.contents) contents = logsQuery.data.contents;
 
-  // Logs are read from the bottom: open at the newest lines.
-  const scrollRef = useRef<NativeScrollView>(null);
-  const scrollToEnd = useCallback(() => scrollRef.current?.scrollToEnd({ animated: false }), []);
+  // Newest line first in an inverted list, so offset 0 is the end of the log. The sheet holds its
+  // scroll at 0 while it opens, which undid scrollToEnd.
+  const lines = useMemo(() => contents.split("\n").reverse(), [contents]);
 
   const handleCopy = useCallback(() => {
     const logs = logsQuery.data;
@@ -75,41 +81,33 @@ export function PhoneLogsSheet({
       scrollable={false}
       testID="phone-linux-logs-sheet"
     >
-      {/* Content can be measured before the sheet's viewport is (open animation, cached data), so
-          scroll again whenever the viewport is laid out. */}
-      <ScrollView
-        ref={scrollRef}
-        style={styles.scroll}
-        onContentSizeChange={scrollToEnd}
-        onLayout={scrollToEnd}
-        nestedScrollEnabled
-      >
-        <View style={styles.sheetBody}>
-          <SegmentedControl options={options} value={kind} onValueChange={onKindChange} size="sm" />
-          <Text style={settingsStyles.rowHint} selectable>
-            {logsQuery.data?.path ?? " "}
-          </Text>
-          <Text style={styles.logOutput} selectable dataSet={CODE_SURFACE_DATASET}>
-            {contents}
-          </Text>
-          <View style={styles.sheetActions}>
-            <Button variant="outline" size="sm" onPress={handleCopy} disabled={!logsQuery.data}>
-              {t("common.actions.copy")}
-            </Button>
-          </View>
+      <View style={styles.sheetBody}>
+        <SegmentedControl options={options} value={kind} onValueChange={onKindChange} size="sm" />
+        <Text style={settingsStyles.rowHint} selectable>
+          {logsQuery.data?.path ?? " "}
+        </Text>
+        <FlatList
+          style={styles.list}
+          data={lines}
+          renderItem={renderLine}
+          keyExtractor={lineKey}
+          inverted
+          nestedScrollEnabled
+        />
+        <View style={styles.sheetActions}>
+          <Button variant="outline" size="sm" onPress={handleCopy} disabled={!logsQuery.data}>
+            {t("common.actions.copy")}
+          </Button>
         </View>
-      </ScrollView>
+      </View>
     </AdaptiveModalSheet>
   );
 }
 
 const styles = StyleSheet.create((theme) => ({
-  // Same bounds as the sheet's own scroll body, so the log scrolls instead of growing the sheet.
-  scroll: {
+  sheetBody: {
     flex: 1,
     minHeight: 0,
-  },
-  sheetBody: {
     gap: theme.spacing[3],
     paddingBottom: theme.spacing[2],
   },
@@ -118,6 +116,11 @@ const styles = StyleSheet.create((theme) => ({
     fontSize: theme.fontSize.code,
     fontFamily: theme.fontFamily.mono,
     lineHeight: 18,
+  },
+  // Bounded by the sheet body, so the log scrolls instead of growing the sheet.
+  list: {
+    flex: 1,
+    minHeight: 0,
   },
   sheetActions: {
     flexDirection: "row",

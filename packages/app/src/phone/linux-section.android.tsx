@@ -1,5 +1,6 @@
+import * as Linking from "expo-linking";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Alert as NativeAlert, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
@@ -24,7 +25,7 @@ import {
   type PhoneRuntimeState,
   type ServiceState,
 } from "../../modules/paseo-phone-runtime";
-import { readPhoneNotificationIntent } from "./format";
+import { readPhoneNotificationIntent, type PhoneNotificationIntent } from "./format";
 import { PhoneLogsSheet } from "./logs-sheet.android";
 
 type ReadyState = Extract<PhoneRuntimeState, { status: "ready" }>;
@@ -144,16 +145,40 @@ export function LinuxSection({ state, serverId }: { state: ReadyState; serverId:
     params[PHONE_NOTIFICATION_QUERY.logs],
   );
   const stoppable = linux.state === "running" || linux.state === "starting";
+  // The same intent can arrive twice: as route params and as a `url` event.
+  const lastIntentAt = useRef(0);
+  const handleIntent = useStableEvent((next: PhoneNotificationIntent) => {
+    if (!next.confirmStop && !next.logs) return;
+    const now = Date.now();
+    if (now - lastIntentAt.current < 1_500) return;
+    lastIntentAt.current = now;
+    if (next.logs) openLogs(next.logs);
+    if (next.confirmStop && stoppable) void handleStop();
+  });
+  const { confirmStop, logs } = intent;
   useEffect(() => {
-    if (!intent.confirmStop) return;
-    router.setParams({ [PHONE_NOTIFICATION_QUERY.confirmStop]: undefined });
-    if (stoppable) void handleStop();
-  }, [handleStop, intent.confirmStop, stoppable, router]);
+    if (!confirmStop && !logs) return;
+    router.setParams({
+      [PHONE_NOTIFICATION_QUERY.confirmStop]: undefined,
+      [PHONE_NOTIFICATION_QUERY.logs]: undefined,
+    });
+    handleIntent({ confirmStop, logs });
+  }, [confirmStop, handleIntent, logs, router]);
+  // A link to the page already on screen does not change its params, so read the URL event too.
   useEffect(() => {
-    if (!intent.logs) return;
-    router.setParams({ [PHONE_NOTIFICATION_QUERY.logs]: undefined });
-    openLogs(intent.logs);
-  }, [intent.logs, openLogs, router]);
+    const subscription = Linking.addEventListener("url", ({ url }) => {
+      const parsed = Linking.parse(url);
+      if (!parsed.path?.includes(serverId)) return;
+      const query = parsed.queryParams ?? {};
+      handleIntent(
+        readPhoneNotificationIntent(
+          query[PHONE_NOTIFICATION_QUERY.confirmStop],
+          query[PHONE_NOTIFICATION_QUERY.logs],
+        ),
+      );
+    });
+    return () => subscription.remove();
+  }, [handleIntent, serverId]);
 
   let linuxAction = (
     <Button variant="outline" onPress={handleStart}>
