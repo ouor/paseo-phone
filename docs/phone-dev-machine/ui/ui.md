@@ -112,3 +112,11 @@
 - 저장소 권한 허용 → `restart-required` Alert → Restart Linux → `mounted`.
 - Linux Stop 후 사이드바 콜아웃, Start 시 "Starting..." 비활성, 실행되면 사라짐.
 - 한국어 기기 언어에서 폰 문구와 본체 문구가 둘 다 한국어인지.
+
+## 8. 1라운드 기기 확인 (devphone01, 2026-10-30)
+
+- 코어 `572c8bbcd` 반영: 교환 폴더 재시작은 코어 `restartLinux()`를 쓴다(UI 쪽 stop→대기→start 삭제). 알림 링크가 `/settings/hosts/<id>/host?...`로 바뀌어 Linux 섹션의 쿼리 처리와 맞는다(기기에서 알림 탭은 아직 안 눌러 봄).
+- `scripts/phone/build-apk.sh`로 빌드, `adb install -r` 후 quick-qa로 본 것: 설치된 상태라 스플래시 → 시작 화면, Host 페이지에 Linux(실행 중, 멈추기), 데몬(실행 중, 재시작), SSH 서버, 화면 꺼짐 유지, 원격 접속(키 0개 Alert, Wi-Fi/Tailscale 전환), 교환 폴더(저장소 권한 Alert), Linux 초기화가 순서대로 나온다. 한국어 문구 정상.
+- 좁은 폰에서 Linux·데몬 행의 배지와 버튼은 `SettingsRow`의 compact 레이아웃대로 라벨 아래 줄로 내려간다. 의도된 동작이라 둔다.
+- 고침: 호스트 키 행이 키 종류 셋(ecdsa, ed25519, rsa)을 6줄로 보여서 ed25519 하나만 보이게 했다.
+- 화면 A(설치·실패), 키 시트, 로그 시트, 콜아웃은 이번에 보지 않았다(재설치가 필요하거나 상태를 바꿔야 함).
