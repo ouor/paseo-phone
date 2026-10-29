@@ -2,13 +2,15 @@ package io.github.ouor.paseophone.runtime.ssh
 
 import android.system.Os
 import java.io.File
+import java.io.FileOutputStream
 import java.nio.ByteBuffer
 import java.security.MessageDigest
 import java.util.Base64
 
 /**
  * Reads and writes `rootfs/root/.ssh/authorized_keys` from the Android side (architecture §5.1).
- * sshd re-reads the file per login, so no restart is needed.
+ * sshd re-reads the file per login; removing a key also needs an sshd restart (the controller does it)
+ * to drop sessions already open with it. All instances share one lock, so read-modify-write never races.
  */
 class AuthorizedKeys(rootfs: File) {
   data class Key(val type: String, val comment: String, val fingerprint: String)
@@ -19,27 +21,37 @@ class AuthorizedKeys(rootfs: File) {
   private val sshDir = File(rootfs, "root/.ssh")
   private val file = File(sshDir, "authorized_keys")
 
-  fun list(): List<Key> = readLines().mapNotNull { parse(it) }
+  /** Every key in the file, including lines with an options prefix someone else wrote, so the UI can show and remove them. */
+  fun list(): List<Key> = synchronized(LOCK) { readLines().mapNotNull { parse(it) } }
 
-  /** Never logs or stores [text] when it looks like a private key. */
+  /** Never logs or stores [text] when it looks like a private key. Option prefixes are refused. */
   fun add(text: String): Key {
     if (text.contains("-----BEGIN") || text.contains("PRIVATE KEY")) {
       throw KeyException("private-key", "This is a private key. Paste the public key (.pub) instead.")
     }
     val lines = text.lines().map { it.trim() }.filter { it.isNotEmpty() }
-    val key = lines.singleOrNull()?.let { parse(it) } ?: throw KeyException("invalid-key", "Not a single OpenSSH public key line")
-    if (list().any { it.fingerprint == key.fingerprint }) {
-      throw KeyException("duplicate-key", "This key is already authorized")
+    val line = lines.singleOrNull()
+    // Only `type base64 [comment]`: options such as command= or from= would let a pasted line change what the key may do.
+    val key =
+      line?.takeIf { it.split(WHITESPACE).first() in KEY_TYPES }?.let { parse(it) }
+        ?: throw KeyException("invalid-key", "Not a single OpenSSH public key line")
+    synchronized(LOCK) {
+      val existing = readLines()
+      if (existing.any { parse(it)?.fingerprint == key.fingerprint }) {
+        throw KeyException("duplicate-key", "This key is already authorized")
+      }
+      write(existing + line)
     }
-    write(readLines() + lines.single())
     return key
   }
 
   fun remove(fingerprint: String) {
-    val lines = readLines()
-    val kept = lines.filter { parse(it)?.fingerprint != fingerprint }
-    if (kept.size == lines.size) throw KeyException("not-found", "No authorized key with $fingerprint")
-    write(kept)
+    synchronized(LOCK) {
+      val lines = readLines()
+      val kept = lines.filter { parse(it)?.fingerprint != fingerprint }
+      if (kept.size == lines.size) throw KeyException("not-found", "No authorized key with $fingerprint")
+      write(kept)
+    }
   }
 
   private fun readLines(): List<String> = if (file.isFile) file.readLines() else emptyList()
@@ -54,6 +66,8 @@ class AuthorizedKeys(rootfs: File) {
   }
 
   companion object {
+    private val LOCK = Any()
+
     internal val WHITESPACE = Regex("""\s+""")
 
     private val KEY_TYPES =

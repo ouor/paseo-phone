@@ -1,0 +1,43 @@
+{
+  "status": "ready",
+  "linux": {
+    "state": "running"
+  },
+  "daemon": {
+    "state": "running",
+    "serverId": "srv_test",
+    "version": "0.14.0",
+    "listen": "127.0.0.1:6767"
+  },
+  "ssh": {
+    "enabled": true,
+    "port": 2222,
+    "state": {
+      "state": "running"
+    },
+    "hostKeyFingerprints": ["ssh-ed25519 SHA256:8U6KLuWB+vF3OoAwYwDpYUr8pJ0EOpASSW+rGVeTHMQ"]
+  },
+  "keepAwake": true,
+  "distro": "Debian 13",
+  "addresses": [
+    {
+      "kind": "wifi",
+      "address": "192.168.1.23"
+    },
+    {
+      "kind": "tailscale",
+      "address": "100.101.102.103"
+    }
+  ],
+  "exchange": {
+    "status": "mounted",
+    "phonePathLabel": "Internal storage/Paseo",
+    "phonePath": "/storage/emulated/0/Paseo",
+    "linuxPath": "/root/exchange"
+  },
+  "device": {
+    "batteryOptimized": true,
+    "phantomProcessMonitor": "disabled",
+    "notificationsAllowed": true
+  }
+}

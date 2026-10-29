@@ -1,0 +1,11 @@
+{
+  "status": "setup",
+  "mode": "install",
+  "step": "download",
+  "progress": {
+    "done": 74000000,
+    "total": 182000000,
+    "unit": "bytes"
+  },
+  "targetVersion": "0.14.0"
+}

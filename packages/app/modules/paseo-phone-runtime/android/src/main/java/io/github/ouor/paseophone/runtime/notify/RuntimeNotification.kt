@@ -9,12 +9,12 @@ import android.content.Intent
 import android.net.Uri
 import androidx.core.app.NotificationCompat
 import io.github.ouor.paseophone.runtime.R
+import io.github.ouor.paseophone.runtime.linux.PhoneConstants
 
 /** The one foreground-service notification on channel `linux_runtime` (architecture §7.4, design §7). */
 object RuntimeNotification {
   const val CHANNEL_ID = "linux_runtime"
   const val NOTIFICATION_ID = 6767
-  private const val SCHEME = "paseo-phone"
 
   sealed interface View {
     data class Setup(val update: Boolean, val step: String, val bytesDone: Long?, val bytesTotal: Long?) : View
@@ -74,7 +74,7 @@ object RuntimeNotification {
         builder
           .setContentTitle(context.getString(R.string.linux_notif_not_responding))
           .setContentText(context.getString(R.string.linux_notif_not_responding_text))
-          .setContentIntent(deepLink(context, hostPath(view.serverId, "logs=daemon"), 1))
+          .setContentIntent(deepLink(context, hostPath(view.serverId, "$QUERY_LOGS=daemon"), 1))
           .setOngoing(false)
           .addAction(0, context.getString(R.string.linux_notif_action_restart), actionIntent(ACTION_RESTART_DAEMON))
       is View.Running -> {
@@ -99,7 +99,7 @@ object RuntimeNotification {
           builder.addAction(
             0,
             context.getString(R.string.linux_notif_action_stop),
-            deepLink(context, hostPath(view.serverId, "confirmStop=1"), 2),
+            deepLink(context, hostPath(view.serverId, "$QUERY_CONFIRM_STOP=1"), 2),
           )
         }
         if (view.sshEnabled && lines.size > 1) {
@@ -112,14 +112,18 @@ object RuntimeNotification {
 
   const val ACTION_RESTART_DAEMON = "io.github.ouor.paseophone.runtime.RESTART_DAEMON"
 
-  // `settings/hosts/<id>` redirects to Connections and drops the query; `/host` is the host page itself.
-  // Without a serverId the link only opens the app.
+  // Query keys: keep equal to PHONE_NOTIFICATION_QUERY in modules/paseo-phone-runtime/src/types.ts.
+  private const val QUERY_CONFIRM_STOP = "confirmStop"
+  private const val QUERY_LOGS = "logs"
+
+  // Same path as buildSettingsHostSectionRoute(serverId, "host") in packages/app/src/utils/host-routes.ts.
+  // `settings/hosts/<id>` alone redirects to Connections and drops the query. Without a serverId the link only opens the app.
   private fun hostPath(serverId: String?, query: String?): String =
     if (serverId == null) "" else "settings/hosts/${Uri.encode(serverId)}/host" + (query?.let { "?$it" } ?: "")
 
   private fun deepLink(context: Context, path: String, requestCode: Int): PendingIntent {
     val intent =
-      Intent(Intent.ACTION_VIEW, Uri.parse("$SCHEME://$path"))
+      Intent(Intent.ACTION_VIEW, Uri.parse("${PhoneConstants.URL_SCHEME}://$path"))
         .setPackage(context.packageName)
         .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
     return PendingIntent.getActivity(

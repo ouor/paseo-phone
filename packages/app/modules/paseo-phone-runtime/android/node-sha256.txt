@@ -1,0 +1,3 @@
+# <node version> <sha256 of node-v<version>-linux-arm64.tar.xz>, one line per version (architecture §3.1).
+# Check against nodejs.org SHASUMS256.txt and its signature before adding a line.
+22.20.0 06907b9c088ce62305bc1530e5c1ae1510245114645768f7750c349c5b6fe667

@@ -15,25 +15,27 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
 import androidx.core.content.IntentCompat
-import io.github.ouor.paseophone.runtime.linux.ProotProcess
 import io.github.ouor.paseophone.runtime.notify.RuntimeNotification
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * Foreground service (`specialUse`) that keeps the app process alive while Linux runs or setup works
- * (architecture §8.1). It holds the notification, wake/wifi locks and the proot handles so they die
- * with it. It has no state machine: RuntimeController drives it and receives events through [Listener].
+ * (architecture §8.1). It holds the notification and the wake/wifi locks. It has no state machine and
+ * owns no processes: RuntimeController drives it from its confined thread and hears back through
+ * [Listener]. [onDestroy] never touches locks or processes itself.
  */
 class RuntimeService : Service() {
   interface Listener {
     fun onNotificationAction(action: String)
-    fun onServiceDestroyed()
+
+    /** Only for the current instance, i.e. a destroy we did not ask for. */
+    fun onServiceDestroyed(service: RuntimeService)
   }
 
-  private val processes = mutableMapOf<String, ProotProcess>()
   private var wakeLock: PowerManager.WakeLock? = null
   private var wifiLock: WifiManager.WifiLock? = null
+  private val destroyed = CompletableDeferred<Unit>()
 
   // Last notification and whether it could actually be shown; Android drops it while POST_NOTIFICATIONS is denied.
   private var lastNotification: Notification? = null
@@ -46,7 +48,7 @@ class RuntimeService : Service() {
     val action = intent?.action
     if (action != null && action != ACTION_START) {
       listener?.onNotificationAction(action)
-      if (instance == null) stopSelf() // a stale notification action created us; nothing to own
+      if (instance !== this) stopSelf() // a stale notification action created us; nothing to own
       return START_NOT_STICKY
     }
     val notification =
@@ -64,14 +66,10 @@ class RuntimeService : Service() {
   }
 
   override fun onDestroy() {
-    if (instance === this) {
-      instance = null
-      started = CompletableDeferred()
-    }
-    processes.values.forEach { runCatching { it.destroyForcibly() } }
-    processes.clear()
-    setKeepAwake(false)
-    listener?.onServiceDestroyed()
+    val wasCurrent = instance === this
+    if (wasCurrent) instance = null
+    destroyed.complete(Unit)
+    if (wasCurrent) listener?.onServiceDestroyed(this)
     super.onDestroy()
   }
 
@@ -98,63 +96,79 @@ class RuntimeService : Service() {
 
   private fun notificationsAllowed() = NotificationManagerCompat.from(this).areNotificationsEnabled()
 
-  fun track(key: String, process: ProotProcess) {
-    processes[key] = process
-  }
-
-  fun untrack(key: String, process: ProotProcess) {
-    if (processes[key] === process) processes.remove(key)
-  }
-
-  fun setKeepAwake(enabled: Boolean) {
-    if (enabled) {
-      if (wakeLock?.isHeld != true) {
-        wakeLock =
-          getSystemService(PowerManager::class.java)
-            ?.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "PaseoPhone:runtime")
-            ?.apply { setReferenceCounted(false); acquire() }
-      }
-      if (wifiLock?.isHeld != true) {
-        wifiLock =
-          applicationContext.getSystemService(WifiManager::class.java)
-            ?.createWifiLock(WifiManager.WIFI_MODE_FULL_LOW_LATENCY, "PaseoPhone:runtime")
-            ?.apply { setReferenceCounted(false); acquire() }
-      }
-    } else {
+  /** [wake]: PARTIAL_WAKE_LOCK (keepAwake, and always during setup). [wifi]: low-latency WifiLock (keepAwake). */
+  fun setLocks(wake: Boolean, wifi: Boolean) {
+    if (wake && wakeLock?.isHeld != true) {
+      wakeLock =
+        getSystemService(PowerManager::class.java)
+          ?.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "PaseoPhone:runtime")
+          ?.apply {
+            setReferenceCounted(false)
+            acquire()
+          }
+    } else if (!wake) {
       wakeLock?.takeIf { it.isHeld }?.release()
-      wifiLock?.takeIf { it.isHeld }?.release()
       wakeLock = null
+    }
+    if (wifi && wifiLock?.isHeld != true) {
+      wifiLock =
+        applicationContext
+          .getSystemService(WifiManager::class.java)
+          ?.createWifiLock(WifiManager.WIFI_MODE_FULL_LOW_LATENCY, "PaseoPhone:runtime")
+          ?.apply {
+            setReferenceCounted(false)
+            acquire()
+          }
+    } else if (!wifi) {
+      wifiLock?.takeIf { it.isHeld }?.release()
       wifiLock = null
     }
   }
 
-  /** Leaves the foreground and stops. [keepNotification] leaves the last notification posted (setup failed). */
+  /**
+   * Leaves the foreground and stops. From this call on the instance is no longer current, so its
+   * [onDestroy] is not reported as unexpected. [keepNotification] leaves the last notification posted.
+   */
   fun shutdown(keepNotification: Boolean) {
-    val mode = if (keepNotification) ServiceCompat.STOP_FOREGROUND_DETACH else ServiceCompat.STOP_FOREGROUND_REMOVE
+    if (instance === this) instance = null
+    pendingDestroy = destroyed
     foreground = false
-    ServiceCompat.stopForeground(this, mode)
+    setLocks(wake = false, wifi = false)
+    ServiceCompat.stopForeground(this, if (keepNotification) ServiceCompat.STOP_FOREGROUND_DETACH else ServiceCompat.STOP_FOREGROUND_REMOVE)
     stopSelf()
   }
 
   companion object {
     private const val ACTION_START = "io.github.ouor.paseophone.runtime.START"
     private const val EXTRA_NOTIFICATION = "notification"
+    private const val START_TIMEOUT_MS = 10_000L
 
     @Volatile var listener: Listener? = null
 
+    /** The current instance: started and not shutting down. */
     @Volatile var instance: RuntimeService? = null
       private set
 
     @Volatile private var started = CompletableDeferred<RuntimeService>()
 
-    /** Must be called while the app is in the foreground (Android 12+ FGS start rule). */
-    fun start(context: Context, notification: Notification) {
+    // Destroy signal of the instance we last shut down; a new start waits for it (architecture §8.2).
+    @Volatile private var pendingDestroy: CompletableDeferred<Unit>? = null
+
+    /**
+     * Returns the current instance, starting one if needed. Waits for a stopping instance's onDestroy
+     * first. Must be called while the app is in the foreground (Android 12+ FGS start rule); null on failure.
+     */
+    suspend fun ensure(context: Context, notification: Notification): RuntimeService? {
+      instance?.let { return it }
+      pendingDestroy?.let { withTimeoutOrNull(START_TIMEOUT_MS) { it.await() } }
+      pendingDestroy = null
+      val waiting = CompletableDeferred<RuntimeService>()
+      started = waiting
       val intent =
         Intent(context, RuntimeService::class.java).setAction(ACTION_START).putExtra(EXTRA_NOTIFICATION, notification)
       ContextCompat.startForegroundService(context, intent)
+      return withTimeoutOrNull(START_TIMEOUT_MS) { waiting.await() }
     }
-
-    suspend fun awaitStarted(timeoutMs: Long): RuntimeService? = instance ?: withTimeoutOrNull(timeoutMs) { started.await() }
 
     fun actionIntent(context: Context, action: String): PendingIntent =
       PendingIntent.getService(

@@ -2,15 +2,13 @@ package io.github.ouor.paseophone.runtime
 
 import android.content.Context
 import android.os.SystemClock
-import android.system.Os
-import android.system.OsConstants
 import android.util.Log
 import io.github.ouor.paseophone.runtime.exchange.ExchangeFolder
-import io.github.ouor.paseophone.runtime.linux.ExitInfo
+import io.github.ouor.paseophone.runtime.linux.Identity
 import io.github.ouor.paseophone.runtime.linux.LinuxPaths
-import io.github.ouor.paseophone.runtime.linux.ProotExec
-import io.github.ouor.paseophone.runtime.linux.ProotProcess
-import io.github.ouor.paseophone.runtime.linux.ProotSpec
+import io.github.ouor.paseophone.runtime.linux.PhoneConstants
+import io.github.ouor.paseophone.runtime.linux.RootfsSpec
+import io.github.ouor.paseophone.runtime.linux.RootfsState
 import io.github.ouor.paseophone.runtime.notify.RuntimeNotification
 import io.github.ouor.paseophone.runtime.setup.SetupEvent
 import io.github.ouor.paseophone.runtime.setup.SetupMode
@@ -25,12 +23,14 @@ import java.io.File
 import java.io.IOException
 import java.io.RandomAccessFile
 import java.util.concurrent.CopyOnWriteArrayList
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.delay
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -38,88 +38,30 @@ import kotlinx.coroutines.withContext
 class RuntimeError(val code: String, message: String) : Exception(message)
 
 /**
- * The single runtime state machine and the only writer of state (architecture §7, §8).
- * All state lives on one confined dispatcher, so no locks are needed; blocking work hops to IO.
- * Snapshots are plain maps shaped exactly like `PhoneRuntimeState` in src/types.ts.
+ * The runtime state machine and the only writer of state (architecture §7, §8): command serialization
+ * and the setup / start / stop flows. Processes live in [ProcessSupervisor], the snapshot shape in
+ * [StateSnapshot]. Everything runs on one confined dispatcher; blocking work hops to IO.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 object RuntimeController : RuntimeService.Listener {
   private const val TAG = "PaseoPhoneRuntime"
-  private const val SSH_PORT = 2222
-  private const val LISTEN = "127.0.0.1:6767"
-  private const val START_TIMEOUT_MS = 120_000L
-  private const val HEALTH_INTERVAL_MS = 30_000L
-  private const val RESTART_WINDOW_MS = 5 * 60_000L
-  private const val RESTART_LIMIT = 5
-  private const val SCRIPT_DIR = "/opt/paseo-phone"
-  private const val PHONE_PACKAGE = "io.github.ouor.paseophone"
 
   private val confined = Dispatchers.Default.limitedParallelism(1)
   private val scope = CoroutineScope(SupervisorJob() + confined)
-
-  private data class Svc(val state: String, val code: String? = null, val message: String? = null) {
-    val active get() = state == "starting" || state == "running"
-
-    fun toMap(): Map<String, Any?> =
-      if (code == null) mapOf("state" to state) else mapOf("state" to state, "code" to code, "message" to (message ?: ""))
-  }
-
-  private val STOPPED = Svc("stopped")
-  private val STARTING = Svc("starting")
-  private val RUNNING = Svc("running")
-  private val STOPPING = Svc("stopping")
-
-  private sealed interface Phase {
-    object Checking : Phase
-
-    data class Setup(val mode: SetupMode, val step: String, val progress: SetupEvent.Progress?) : Phase
-
-    data class SetupFailed(
-      val mode: SetupMode,
-      val step: String,
-      val code: String,
-      val message: String,
-      val canStartPrevious: Boolean,
-    ) : Phase
-
-    object Ready : Phase
-  }
-
-  /** One long-running proot process (daemon or sshd). */
-  private class Managed(val key: String, val script: String, val logKind: String) {
-    var process: ProotProcess? = null
-    var state = Svc("stopped")
-    var wanted = false // we want it running; false means an exit is ours
-    val failures = ArrayDeque<Long>()
-    var restartJob: Job? = null
-    var watchJob: Job? = null
-    var misses = 0
-  }
-
-  private data class Env(
-    val serverId: String? = null,
-    val daemonVersion: String = BuildConfig.PASEO_DAEMON_VERSION,
-    val hostKeys: List<String> = emptyList(),
-    val addresses: List<NetworkAddresses.Address> = emptyList(),
-    val exchange: ExchangeFolder.Status? = null,
-    val device: DeviceChecks.Result? = null,
-  )
 
   private lateinit var context: Context
   private lateinit var paths: LinuxPaths
   private lateinit var store: RuntimeStore
   private lateinit var runner: SetupRunner
-  private var initialized = false
+  private lateinit var supervisor: ProcessSupervisor
+  @Volatile private var initialized = false
 
   private var data = RuntimeStore.Data()
   private var phase: Phase = Phase.Checking
-  private var linux = STOPPED
-  private val daemon = Managed("daemon", "run-daemon.sh", "daemon")
-  private val sshd = Managed("sshd", "run-sshd.sh", "sshd")
+  private var linux = Svc.STOPPED
   private var env = Env()
-  private var exchangeDir: File? = null // what the running proot processes were started with
-  private var busy = false
-  private var healthJob: Job? = null
+  private var exchangeBound = false
+  private var commandJob: Job? = null
   private var unwatchNetwork: (() -> Unit)? = null
   private var lastProgressAt = 0L
   private var lastView: RuntimeNotification.View? = null
@@ -130,25 +72,46 @@ object RuntimeController : RuntimeService.Listener {
 
   // ---- lifecycle -------------------------------------------------------------------------------
 
-  /** Idempotent. Restores from state.json and resumes `desired: "running"` (architecture §8.2). */
+  /** Idempotent. Decides the first state from disk (architecture §2.3, §8.2); never stays in `checking`. */
   @Synchronized
   fun init(appContext: Context) {
     if (initialized) return
     // Autolinking can put this module in the regular Paseo build too; never install Linux there.
-    if (!appContext.packageName.startsWith(PHONE_PACKAGE)) return
+    if (!appContext.packageName.startsWith(PhoneConstants.APPLICATION_ID)) return
     initialized = true
     context = appContext.applicationContext
     paths = LinuxPaths(context)
     store = RuntimeStore(paths.stateFile)
     runner = SetupRunner(context, paths)
+    supervisor = ProcessSupervisor(context, paths, runner, scope) { reconcile() }
     RuntimeService.listener = this
-    scope.launch {
-      data = io { store.load() }
-      if (isInstalled()) phase = Phase.Ready
-      refreshEnv()
-      publish()
-      // A fresh install has desired = "running", so first launch starts setup without a tap.
-      if (data.desired == "running") runCatching { start() }.onFailure { Log.w(TAG, "auto start", it) }
+    scope.launch { initialize() }
+  }
+
+  private suspend fun initialize() {
+    data = io { store.load() }
+    val disk = io { paths.rootfsState() }
+    refreshEnv()
+    when (disk) {
+      RootfsState.ABSENT, RootfsState.EXTRACTED -> {
+        val failed = data.failedStep
+        if (failed != null) {
+          phase = Phase.SetupFailed(SetupMode.INSTALL, failed, "unknown", "Setup stopped at \"$failed\".", false)
+          publish()
+        } else {
+          newCommand { runSetup(SetupMode.INSTALL, resumeStep(disk, null)) }
+        }
+      }
+      RootfsState.INSTALLED -> {
+        phase = Phase.Ready
+        if (data.desired == "running") {
+          linux = Svc.STARTING // never show `stopped` during the automatic start (architecture §7.1)
+          publish()
+          newCommand { startOrUpdate() }
+        } else {
+          publish()
+        }
+      }
     }
   }
 
@@ -163,80 +126,93 @@ object RuntimeController : RuntimeService.Listener {
   }
 
   // ---- commands --------------------------------------------------------------------------------
-  // Lifecycle commands resolve once accepted; the outcome arrives as state. A command that overlaps
-  // another is rejected with `busy` (no queueing, architecture §7.2).
+  // Lifecycle commands resolve once accepted; the outcome arrives as state. One at a time: an
+  // overlapping one is rejected with `busy`, except stop(), which cancels it (architecture §7.2).
 
   suspend fun start() =
-    accept {
-      if (phase == Phase.Ready && linux.active) return@accept
+    command {
+      if (phase == Phase.Ready && linux.active) return@command
       startOrSetup()
     }
 
-  suspend fun stop() = accept { stopLinux(userInitiated = true) }
+  suspend fun stop() {
+    withContext(confined) {
+      val previous = commandJob
+      newCommand {
+        previous?.cancelAndJoin()
+        stopFlow()
+      }
+    }
+  }
 
-  /** Stop then start as one command; also picks up a new exchange-folder bind. */
   suspend fun restartLinux() =
-    accept {
-      stopLinux(userInitiated = false)
-      startOrSetup()
+    command {
+      if (phase != Phase.Ready) return@command startOrSetup()
+      supervisor.stopAll()
+      startLinux(null)
     }
 
   suspend fun restartDaemon() =
-    accept {
-      if (phase != Phase.Ready || !linux.active) return@accept startOrSetup()
-      stopManaged(daemon, 10_000)
-      daemon.failures.clear()
-      daemon.wanted = true
-      launch(daemon)
+    command {
+      if (phase != Phase.Ready || !linux.active) return@command startOrSetup()
+      supervisor.restart(supervisor.daemon)
     }
 
   suspend fun retrySetup() =
-    accept {
-      val failed = phase as? Phase.SetupFailed ?: return@accept
-      if (failed.step == "start") startLinux(failed.mode) else runSetup(failed.mode, failed.step)
+    command {
+      val failed = phase as? Phase.SetupFailed ?: return@command
+      when {
+        failed.step == "start" -> startLinux(failed.mode)
+        failed.mode == SetupMode.INSTALL -> runSetup(failed.mode, resumeStep(io { paths.rootfsState() }, failed.step))
+        else -> runSetup(failed.mode, failed.step)
+      }
     }
 
   suspend fun startPrevious() {
     val failed = withContext(confined) { phase as? Phase.SetupFailed }
     if (failed == null || !failed.canStartPrevious) throw RuntimeError("not-installed", "No previous installation to start")
-    accept {
+    command {
       phase = Phase.Ready
       startLinux(null)
     }
   }
 
+  /** Stop (service kept) → keep identity → delete rootfs → install (architecture §2.3 D15, D16). */
   suspend fun reinstall() =
-    accept {
-      stopLinux(userInitiated = false)
-      // deleteRootfs never follows links, so a link to the exchange folder cannot take shared files with it.
-      io { paths.deleteRootfs() }
-      data = data.copy(installed = false, daemonVersion = null, nodeVersion = null, failedStep = null)
+    command {
+      supervisor.autoRestart = false
+      supervisor.stopAll()
+      stopWatching()
+      phase = Phase.Setup(SetupMode.INSTALL, "download", null)
+      publish()
+      ensureService()
+      io {
+        if (paths.rootfs.exists()) {
+          Identity.save(paths)
+          LinuxPaths.deleteTree(paths.rootfs) // never follows links (D15)
+        }
+      }
+      data = data.copy(failedStep = null, desired = "running")
       save()
-      phase = Phase.Checking
+      linux = Svc.STOPPED
       runSetup(SetupMode.INSTALL, null)
     }
 
   suspend fun setSshEnabled(enabled: Boolean) =
-    exclusive {
+    command(await = true) {
       data = data.copy(sshEnabled = enabled)
       save()
       if (phase == Phase.Ready && linux.active) {
-        if (enabled) {
-          sshd.failures.clear()
-          sshd.wanted = true
-          launch(sshd)
-        } else {
-          stopManaged(sshd, 5_000)
-        }
+        if (enabled) supervisor.start(supervisor.sshd) else supervisor.stop(supervisor.sshd)
       }
       publish()
     }
 
+  /** Not a lifecycle command: never `busy`. */
   suspend fun setKeepAwake(enabled: Boolean) =
-    exclusive {
+    withContext(confined) {
       data = data.copy(keepAwake = enabled)
       save()
-      RuntimeService.instance?.setKeepAwake(enabled)
       publish()
     }
 
@@ -258,16 +234,17 @@ object RuntimeController : RuntimeService.Listener {
 
   suspend fun addAuthorizedKey(text: String): Map<String, Any?> = keyMap(keys { it.add(text) })
 
-  suspend fun removeAuthorizedKey(fingerprint: String) = keys { it.remove(fingerprint) }
+  /** Restarts a running sshd so sessions opened with the removed key end (architecture §5.1). */
+  suspend fun removeAuthorizedKey(fingerprint: String) {
+    keys { it.remove(fingerprint) }
+    withContext(confined) {
+      if (phase == Phase.Ready && linux.active && supervisor.sshd.process != null) supervisor.restart(supervisor.sshd)
+    }
+  }
 
   suspend fun getLogs(kind: String, maxBytes: Int?): Map<String, Any?> {
-    val file =
-      when (kind) {
-        "daemon" -> paths.logFile("daemon")
-        "ssh" -> paths.logFile("sshd")
-        "setup" -> paths.logFile("setup")
-        else -> throw RuntimeError("not-found", "Unknown log kind: $kind")
-      }
+    if (kind !in setOf("daemon", "ssh", "setup")) throw RuntimeError("not-found", "Unknown log kind: $kind")
+    val file = paths.logFile(kind)
     val contents =
       try {
         io { tail(file, (maxBytes ?: 64 * 1024).toLong()) }
@@ -285,40 +262,50 @@ object RuntimeController : RuntimeService.Listener {
     }
   }
 
-  override fun onServiceDestroyed() {
+  /** The current service died without our shutdown: the processes cannot outlive it. */
+  override fun onServiceDestroyed(service: RuntimeService) {
     scope.launch {
-      // Only unexpected when Linux is still meant to run; the service already killed the processes.
-      if (phase == Phase.Ready && linux.active) {
-        for (m in listOf(daemon, sshd)) {
-          m.wanted = false
-          m.restartJob?.cancel()
-          m.process = null
-          m.state = STOPPED
-        }
-        stopWatching()
-        linux = Svc("error", "crashed", "The foreground service was stopped")
-        publish()
+      commandJob?.cancel()
+      supervisor.killAll()
+      service.setLocks(wake = false, wifi = false)
+      stopWatching()
+      val message = "The foreground service was stopped"
+      when (val p = phase) {
+        is Phase.Setup -> phase = Phase.SetupFailed(p.mode, p.step, "unknown", message, canStartPrevious(p.mode, p.step))
+        Phase.Ready -> if (linux.active) linux = Svc.error("crashed", message)
+        else -> Unit
       }
+      publish()
     }
   }
 
   // ---- setup -----------------------------------------------------------------------------------
 
   private suspend fun startOrSetup() {
-    if (!isInstalled()) return runSetup(SetupMode.INSTALL, data.failedStep)
-    val mode = updateMode()
+    when (val disk = io { paths.rootfsState() }) {
+      RootfsState.INSTALLED -> startOrUpdate()
+      else -> runSetup(SetupMode.INSTALL, resumeStep(disk, data.failedStep))
+    }
+  }
+
+  /** Architecture §2.5 update check: a Node pin change wins over a daemon-only change. */
+  private suspend fun startOrUpdate() {
+    val mode =
+      io {
+        when {
+          runner.installedNodeVersion()?.removePrefix("v") != BuildConfig.NODE_VERSION -> SetupMode.UPDATE_NODE
+          runner.installedDaemonVersion() != BuildConfig.PASEO_DAEMON_VERSION -> SetupMode.UPDATE_DAEMON
+          else -> null
+        }
+      }
     if (mode != null) runSetup(mode, null) else startLinux(null)
   }
 
-  /** Architecture §2.5 "업데이트 판정": a Node pin change wins over a daemon-only change. */
-  private suspend fun updateMode(): SetupMode? =
-    io {
-      val node = runner.installedNodeVersion()?.removePrefix("v")
-      when {
-        node != BuildConfig.NODE_VERSION -> SetupMode.UPDATE_NODE
-        runner.installedDaemonVersion() != BuildConfig.PASEO_DAEMON_VERSION -> SetupMode.UPDATE_DAEMON
-        else -> null
-      }
+  /** Where an install resumes: never `extract` over an existing rootfs, never `configure` without one. */
+  private fun resumeStep(disk: RootfsState, failed: String?): String? =
+    when (disk) {
+      RootfsState.ABSENT -> failed?.takeIf { it == "download" || it == "extract" }
+      else -> failed?.takeIf { it == "configure" || it == "packages" || it == "paseo" } ?: "configure"
     }
 
   private suspend fun runSetup(mode: SetupMode, fromStep: String?) {
@@ -327,10 +314,11 @@ object RuntimeController : RuntimeService.Listener {
     publish()
     // The service keeps setup alive when the user leaves the app.
     if (ensureService() == null) return failSetup(mode, first, "unknown", "Could not start the foreground service")
-    RuntimeService.instance?.setKeepAwake(data.keepAwake)
     val result =
       try {
         io { runner.run(mode, fromStep) { event -> scope.launch { onSetupEvent(event) } } }
+      } catch (e: CancellationException) {
+        throw e // stop() turns this into setup-failed(cancelled)
       } catch (e: Exception) {
         SetupResult.Failed(first, "unknown", e.message ?: e.toString())
       }
@@ -338,7 +326,7 @@ object RuntimeController : RuntimeService.Listener {
       is SetupResult.Failed -> {
         data = data.copy(failedStep = result.step)
         save()
-        failSetup(mode, result.step, result.code, result.message)
+        failSetup(mode, result.step, result.code, result.message, result.freeBytes, result.neededBytes)
       }
       SetupResult.Success -> {
         data = data.copy(failedStep = null)
@@ -367,302 +355,184 @@ object RuntimeController : RuntimeService.Listener {
     }
   }
 
-  private fun failSetup(mode: SetupMode, step: String, code: String, message: String) {
-    val canStartPrevious = mode != SetupMode.INSTALL && isInstalled()
-    phase = Phase.SetupFailed(mode, step, code, message, canStartPrevious)
+  /** Architecture §2.5: npm leaves the old daemon in place; Node is only safe before it is unpacked. */
+  private fun canStartPrevious(mode: SetupMode, step: String) =
+    when (mode) {
+      SetupMode.UPDATE_DAEMON -> true
+      SetupMode.UPDATE_NODE -> step == "download"
+      SetupMode.INSTALL -> false
+    }
+
+  /** Setup failure takes the service down with the dismissible "setup failed" notification left behind. */
+  private fun failSetup(
+    mode: SetupMode,
+    step: String,
+    code: String,
+    message: String,
+    freeBytes: Long? = null,
+    neededBytes: Long? = null,
+  ) {
+    supervisor.autoRestart = false
+    phase = Phase.SetupFailed(mode, step, code, message, canStartPrevious(mode, step), freeBytes, neededBytes)
     publish()
-    // Keep the dismissible "setup failed" notification after the service goes away.
     RuntimeService.instance?.shutdown(keepNotification = true)
   }
 
   // ---- Linux start / stop ----------------------------------------------------------------------
 
-  /** Starts daemon and sshd. [setupMode] non-null means this is setup's `start` step. */
+  /**
+   * Launches daemon and sshd and returns; readiness is watched outside `busy` and lands in [reconcile].
+   * [setupMode] non-null means this is setup's `start` step.
+   */
   private suspend fun startLinux(setupMode: SetupMode?) {
     if (setupMode != null) {
       phase = Phase.Setup(setupMode, "start", null)
     } else {
       phase = Phase.Ready
-      linux = STARTING
+      linux = Svc.STARTING
     }
     data = data.copy(desired = "running")
     save()
     publish()
 
-    val service = ensureService()
-    if (service == null) {
-      val message = "Could not start the foreground service"
-      if (setupMode != null) return failSetup(setupMode, "start", "unknown", message)
-      linux = Svc("error", "start-failed", message)
-      return publish()
+    if (ensureService() == null) return startFailed(setupMode, "Could not start the foreground service")
+    try {
+      io { runner.installScripts() }
+      // Managed instruction blocks for the three agents (architecture §5.3); output goes to setup.log. Not fatal.
+      val result = runner.runScript("agent-instructions.sh", paths.logFile("setup"), 30_000)
+      if (result.exitCode != 0) Log.w(TAG, "agent-instructions.sh failed: $result")
+    } catch (e: CancellationException) {
+      throw e
+    } catch (e: Exception) {
+      return startFailed(setupMode, e.message ?: e.toString())
     }
-    service.setKeepAwake(data.keepAwake)
-
-    io {
-      runner.installScripts()
-      // Managed instruction blocks for the three agents (architecture §5.3). Not fatal.
-      val result =
-        runCatching {
-          ProotExec.run(context, paths, spec("agent-instructions.sh"), paths.logFile("daemon"), 30_000)
-        }
-      if (result.getOrNull()?.exitCode != 0) Log.w(TAG, "agent-instructions.sh failed: $result")
-    }
-    exchangeDir = io { ExchangeFolder.status(context).dir }
-
-    for (m in listOf(daemon, sshd)) {
-      m.failures.clear()
-      m.misses = 0
-    }
-    daemon.wanted = true
-    launch(daemon)
-    if (data.sshEnabled) {
-      sshd.wanted = true
-      launch(sshd)
-    }
+    val exchangeDir = io { ExchangeFolder.status(context).dir }
+    supervisor.exchangeDir = exchangeDir
+    exchangeBound = exchangeDir != null
+    supervisor.autoRestart = setupMode == null
+    supervisor.start(supervisor.daemon)
+    if (!isStarting(setupMode)) return // the daemon could not even launch; reconcile has reported it
+    if (data.sshEnabled) supervisor.start(supervisor.sshd)
     stopWatching()
     unwatchNetwork = NetworkAddresses.watch(context) { refreshEnvironment() }
-
-    val ready = awaitDaemonReady()
-    if (setupMode != null) {
-      if (!ready) {
-        val reason = io { lastLine(paths.logFile("daemon")) } ?: context.getString(R.string.linux_error_not_responding)
-        stopAll()
-        return failSetup(setupMode, "start", "command-failed", reason)
-      }
-      data =
-        data.copy(
-          installed = true,
-          daemonVersion = io { runner.installedDaemonVersion() },
-          nodeVersion = io { runner.installedNodeVersion() },
-          failedStep = null,
-        )
-      save()
-      phase = Phase.Ready
-    }
-    if (linux.state == "starting" || setupMode != null) linux = RUNNING
-    healthJob = scope.launch { healthLoop() }
-    refreshEnv()
-    publish()
-  }
-
-  private suspend fun stopLinux(userInitiated: Boolean) {
-    if (userInitiated) {
-      data = data.copy(desired = "stopped")
-      save()
-    }
-    if (phase != Phase.Ready) return
-    if (linux.active) {
-      linux = STOPPING
-      publish()
-    }
-    stopAll()
-    linux = STOPPED
-    RuntimeService.instance?.shutdown(keepNotification = false)
-    refreshEnv()
-    publish()
-  }
-
-  /** Daemon first, then sshd (architecture §8.2). */
-  private suspend fun stopAll() {
-    stopWatching()
-    stopManaged(daemon, 10_000)
-    stopManaged(sshd, 5_000)
-  }
-
-  private fun stopWatching() {
-    healthJob?.cancel()
-    healthJob = null
-    unwatchNetwork?.invoke()
-    unwatchNetwork = null
-  }
-
-  private suspend fun awaitDaemonReady(): Boolean {
-    while (true) {
-      if (daemon.state == RUNNING) return true
-      if (!daemon.wanted || daemon.process == null || daemon.state.state == "error") return false
-      delay(250)
-    }
-  }
-
-  // ---- process supervision ---------------------------------------------------------------------
-
-  private suspend fun launch(m: Managed) {
-    val service = RuntimeService.instance
-    if (service == null) {
-      m.state = Svc("error", "start-failed", "Foreground service is not running")
-      return publish()
-    }
-    val logFile = paths.logFile(m.logKind)
-    val process =
-      try {
-        io { ProotProcess.start(context, paths, spec(m.script), logFile) }
-      } catch (e: Exception) {
-        m.state = Svc("error", "start-failed", e.message ?: e.toString())
-        return publish()
-      }
-    if (!m.wanted || RuntimeService.instance !== service) {
-      // Stopped while we were starting it.
-      process.destroyForcibly()
-      return
-    }
-    m.process = process
-    m.state = STARTING
-    m.misses = 0
-    service.track(m.key, process)
-    process.onExit { info -> scope.launch { onExit(m, process, info) } }
-    m.watchJob?.cancel()
-    m.watchJob = scope.launch { if (m === daemon) watchDaemonReady(process) else watchSshdUp(process) }
-    publish()
-  }
-
-  /** `starting` until the daemon answers HTTP, `error("not-responding")` after 120 s (architecture §3.4). */
-  private suspend fun watchDaemonReady(process: ProotProcess) {
-    val deadline = SystemClock.elapsedRealtime() + START_TIMEOUT_MS
-    while (daemon.process === process) {
-      if (io { DaemonProbe.isResponding() }) {
-        daemon.state = RUNNING
-        refreshEnv()
-        return publish()
-      }
-      if (SystemClock.elapsedRealtime() > deadline) {
-        daemon.state = Svc("error", "not-responding", context.getString(R.string.linux_error_not_responding))
-        return publish()
-      }
-      delay(1_000)
-    }
-  }
-
-  // shortcut: sshd counts as running once its proot survives 2 s; probe port 2222 if QA sees false positives.
-  private suspend fun watchSshdUp(process: ProotProcess) {
-    delay(2_000)
-    if (sshd.process === process && process.isAlive()) {
-      sshd.state = RUNNING
-      publish()
-    }
-  }
-
-  /** Every 30 s: 3 misses in a row → not-responding; a later answer recovers it. Also refreshes env. */
-  private suspend fun healthLoop() {
-    while (true) {
-      delay(HEALTH_INTERVAL_MS)
-      val process = daemon.process
-      if (process != null && process.isAlive() && (daemon.state == RUNNING || daemon.state.code == "not-responding")) {
-        if (io { DaemonProbe.isResponding() }) {
-          daemon.misses = 0
-          daemon.state = RUNNING
-        } else if (++daemon.misses >= 3) {
-          daemon.state = Svc("error", "not-responding", context.getString(R.string.linux_error_not_responding))
-        }
-      }
+    supervisor.startHealth {
       refreshEnv()
       publish()
     }
   }
 
-  private suspend fun onExit(m: Managed, process: ProotProcess, info: ExitInfo) {
-    if (m.process !== process) return
-    m.process = null
-    m.watchJob?.cancel()
-    RuntimeService.instance?.untrack(m.key, process)
-    if (!m.wanted) {
-      m.state = STOPPED
-      return publish()
-    }
-    val killed = info.signal == 9 || info.exitCode == 137
-    val message =
-      if (killed) context.getString(R.string.linux_error_killed_by_system)
-      else context.getString(R.string.linux_error_crashed, info.exitCode)
-    m.state = Svc("error", if (killed) "killed-by-system" else "crashed", message)
-    Log.w(TAG, "${m.key} exited: $info")
-    if (phase != Phase.Ready) return publish() // setup's start step reports the failure itself
+  private fun isStarting(setupMode: SetupMode?) =
+    if (setupMode != null) (phase as? Phase.Setup)?.step == "start" else phase == Phase.Ready && linux.active
 
-    val now = SystemClock.elapsedRealtime()
-    if (recordFailure(m.failures, now)) {
-      m.wanted = false
-      m.state = Svc("error", "restart-limit", context.getString(R.string.linux_error_restart_limit, message))
-      if (m === daemon) {
-        // Without the daemon Linux is useless: stop everything and report at the Linux level.
-        stopAll()
-        linux = m.state
-        RuntimeService.instance?.shutdown(keepNotification = false)
-      }
-      return publish()
-    }
+  private fun startFailed(setupMode: SetupMode?, message: String) {
+    if (setupMode != null) return failSetup(setupMode, "start", "command-failed", message)
+    linux = Svc.error("start-failed", message)
     publish()
-    val backoff = restartDelayMs(m.failures.size)
-    m.restartJob?.cancel()
-    m.restartJob =
-      scope.launch {
-        delay(backoff)
-        if (m.wanted && m.process == null && linux.active) launch(m)
-      }
   }
 
-  /** Records a failure at [now] (elapsed ms); true when 5 failures fall within 5 minutes (architecture §8.3). */
-  internal fun recordFailure(failures: ArrayDeque<Long>, now: Long): Boolean {
-    failures.removeAll { now - it > RESTART_WINDOW_MS }
-    failures.addLast(now)
-    return failures.size >= RESTART_LIMIT
+  /** User stop (architecture §8.2): also ends a cancelled install, start or backoff. */
+  private suspend fun stopFlow() {
+    supervisor.autoRestart = false
+    supervisor.stopAll()
+    stopWatching()
+    val installed = io { paths.rootfsState() } == RootfsState.INSTALLED
+    when (val p = phase) {
+      is Phase.Setup -> {
+        if (p.step != "start") data = data.copy(failedStep = p.step)
+        phase = Phase.SetupFailed(p.mode, p.step, "cancelled", "Stopped", canStartPrevious(p.mode, p.step))
+      }
+      Phase.Ready -> linux = Svc.STOPPED
+      else -> Unit
+    }
+    // Not installed: keep `desired`, so the next launch still resumes the install.
+    if (installed) data = data.copy(desired = "stopped")
+    save()
+    RuntimeService.instance?.shutdown(keepNotification = false)
+    refreshEnv()
+    publish()
   }
 
-  /** Delay before restarting after the [failures]-th recent failure: 1, 2, 4, 8, 16 s, capped at 60 s. */
-  internal fun restartDelayMs(failures: Int): Long = minOf(1_000L shl (failures - 1).coerceIn(0, 6), 60_000L)
+  private fun stopWatching() {
+    supervisor.stopHealth()
+    unwatchNetwork?.invoke()
+    unwatchNetwork = null
+  }
 
-  private suspend fun stopManaged(m: Managed, graceMs: Long) {
-    m.wanted = false
-    m.restartJob?.cancel()
-    m.watchJob?.cancel()
-    val process = m.process
-    if (process == null) {
-      m.state = STOPPED
-      return
-    }
-    m.state = STOPPING
-    publish()
-    io {
-      val supervisor = if (m === daemon) DaemonProbe.readSupervisorPid(paths.rootfs) else null
-      // The supervisor stops its workers cleanly on SIGTERM; proot shares Android's pid space.
-      if (supervisor == null || runCatching { Os.kill(supervisor, OsConstants.SIGTERM) }.isFailure) process.destroy()
-      if (!process.waitFor(graceMs)) {
-        process.destroyForcibly()
-        process.waitFor(5_000)
+  /** Turns supervisor state changes into Linux / setup transitions. Runs on every supervisor change. */
+  private fun reconcile() {
+    val daemon = supervisor.daemon.state
+    val p = phase
+    if (p is Phase.Setup && p.step == "start") {
+      if (daemon == Svc.RUNNING) {
+        phase = Phase.Ready
+        linux = Svc.RUNNING
+        supervisor.autoRestart = true
+      } else if (daemon.state == "error") {
+        val fallback = daemon.message ?: daemon.code ?: "start failed"
+        phase = Phase.SetupFailed(p.mode, "start", "command-failed", fallback, canStartPrevious(p.mode, "start"))
+        // A crash is better explained by the daemon's last log line; "port in use" already says it all.
+        cleanup(keepNotification = true) {
+          if (daemon.code == "start-failed") null else io { lastLine(paths.logFile("daemon")) }
+        }
+      }
+    } else if (p == Phase.Ready && linux.active) {
+      when {
+        daemon == Svc.RUNNING -> linux = Svc.RUNNING
+        daemon.code == "not-responding" -> linux = Svc.RUNNING // alive but silent: the daemon row says so
+        daemon.code == "restart-limit" || daemon.code == "start-failed" -> {
+          // Without the daemon nothing works; report at the Linux level and free the device.
+          linux = daemon
+          cleanup(keepNotification = false) { null }
+        }
       }
     }
-    if (m.process === process) m.process = null
-    RuntimeService.instance?.untrack(m.key, process)
-    m.state = STOPPED
+    publish()
+  }
+
+  /** Stops both processes and the service after a fatal transition, after any running command ends. */
+  private fun cleanup(keepNotification: Boolean, betterMessage: suspend () -> String?) {
+    val previous = commandJob
+    newCommand {
+      previous?.join()
+      supervisor.autoRestart = false
+      supervisor.stopAll()
+      stopWatching()
+      val failed = phase as? Phase.SetupFailed
+      betterMessage()?.let { message -> if (failed != null) phase = failed.copy(message = message) }
+      RuntimeService.instance?.shutdown(keepNotification)
+      publish()
+    }
   }
 
   // ---- helpers ---------------------------------------------------------------------------------
 
-  private suspend fun accept(block: suspend () -> Unit) =
-    withContext(confined) {
-      claim()
-      scope.launch {
+  private suspend fun command(await: Boolean = false, block: suspend () -> Unit) {
+    val job =
+      withContext(confined) {
+        if (commandJob?.isActive == true) throw RuntimeError("busy", "Another runtime command is in progress")
+        newCommand(block)
+      }
+    if (await) job.join()
+  }
+
+  /** Must run on [confined]. Registers [block] as the current command so stop() can cancel it. */
+  private fun newCommand(block: suspend () -> Unit): Job {
+    lateinit var job: Job
+    job =
+      scope.launch(start = CoroutineStart.LAZY) {
         try {
           block()
+        } catch (e: CancellationException) {
+          throw e
         } catch (e: Exception) {
           Log.e(TAG, "command failed", e)
         } finally {
-          busy = false
+          if (commandJob === job) commandJob = null
         }
       }
-      Unit
-    }
-
-  private suspend fun <T> exclusive(block: suspend () -> T): T =
-    withContext(confined) {
-      claim()
-      try {
-        block()
-      } finally {
-        busy = false
-      }
-    }
-
-  private fun claim() {
-    if (busy) throw RuntimeError("busy", "Another runtime command is in progress")
-    busy = true
+    commandJob = job
+    job.start()
+    return job
   }
 
   private fun system(block: () -> Unit) {
@@ -674,7 +544,7 @@ object RuntimeController : RuntimeService.Listener {
   }
 
   private suspend fun <T> keys(block: (AuthorizedKeys) -> T): T {
-    if (!isInstalled()) throw RuntimeError("not-installed", "Linux is not installed")
+    if (!paths.rootfs.isDirectory) throw RuntimeError("not-installed", "Linux is not installed")
     return try {
       io { block(AuthorizedKeys(paths.rootfs)) }
     } catch (e: AuthorizedKeys.KeyException) {
@@ -689,35 +559,20 @@ object RuntimeController : RuntimeService.Listener {
   private fun keyMap(key: AuthorizedKeys.Key): Map<String, Any?> =
     mapOf("type" to key.type, "comment" to key.comment, "fingerprint" to key.fingerprint)
 
-  private suspend fun ensureService(): RuntimeService? {
-    RuntimeService.instance?.let { return it }
+  private suspend fun ensureService(): RuntimeService? =
     try {
-      RuntimeService.start(context, buildNotification(currentView() ?: RuntimeNotification.View.Starting))
+      RuntimeService.ensure(context, buildNotification(currentView() ?: RuntimeNotification.View.Starting))
+    } catch (e: CancellationException) {
+      throw e
     } catch (e: Exception) {
       // ForegroundServiceStartNotAllowedException when the app is not in the foreground.
       Log.e(TAG, "cannot start foreground service", e)
-      return null
+      null
     }
-    return RuntimeService.awaitStarted(10_000)
-  }
-
-  private fun isInstalled(): Boolean = data.installed && paths.isRootfsPresent()
 
   private fun save() = store.save(data)
 
   private suspend fun <T> io(block: suspend () -> T): T = withContext(Dispatchers.IO) { block() }
-
-  private fun spec(script: String) =
-    ProotSpec(
-      command = listOf("/bin/bash", "$SCRIPT_DIR/$script"),
-      env =
-        mapOf(
-          "PASEO_DAEMON_VERSION" to BuildConfig.PASEO_DAEMON_VERSION,
-          "NODE_VERSION" to BuildConfig.NODE_VERSION,
-          "PASEO_PHONE_SSH_PORT" to SSH_PORT.toString(),
-        ),
-      exchangeDir = exchangeDir,
-    )
 
   private fun tail(file: File, maxBytes: Long): String {
     if (!file.isFile) return ""
@@ -738,10 +593,7 @@ object RuntimeController : RuntimeService.Listener {
       io {
         Env(
           serverId = DaemonProbe.readServerId(paths.rootfs),
-          daemonVersion =
-            (if (paths.isRootfsPresent()) runner.installedDaemonVersion() else null)
-              ?: data.daemonVersion
-              ?: BuildConfig.PASEO_DAEMON_VERSION,
+          daemonVersion = runner.installedDaemonVersion() ?: BuildConfig.PASEO_DAEMON_VERSION,
           hostKeys = HostKeys.fingerprints(paths.rootfs),
           addresses = NetworkAddresses.read(),
           exchange = ExchangeFolder.status(context),
@@ -753,118 +605,42 @@ object RuntimeController : RuntimeService.Listener {
   // ---- snapshot + notification -----------------------------------------------------------------
 
   private fun publish() {
-    val next = buildSnapshot()
+    val next = StateSnapshot.build(snapshotInput())
     if (next != snapshot) {
       snapshot = next
       listeners.forEach { listener -> runCatching { listener(next) } }
     }
-    val view = currentView()
     val service = RuntimeService.instance
-    if (view != null && service != null && view != lastView) {
+    if (service == null) {
+      lastView = null
+      return
+    }
+    // Setup always holds the wake lock; otherwise keepAwake decides (architecture §8.1).
+    service.setLocks(wake = phase is Phase.Setup || data.keepAwake, wifi = data.keepAwake)
+    val view = currentView()
+    if (view != null && view != lastView) {
       lastView = view
       service.show(buildNotification(view))
-    } else if (service == null) {
-      lastView = null
     }
     // publish() runs on app foreground, device-check refresh and the 30 s tick, so a late permission grant shows up.
-    service?.repostIfAllowed()
+    service.repostIfAllowed()
   }
+
+  private fun snapshotInput() =
+    SnapshotInput(
+      phase = phase,
+      linux = linux,
+      daemon = supervisor.daemon.state,
+      ssh = supervisor.sshd.state,
+      store = data,
+      env = env,
+      exchangeBound = exchangeBound,
+      targetVersion = BuildConfig.PASEO_DAEMON_VERSION,
+      distro = RootfsSpec.DISTRO_LABEL,
+    )
 
   private fun buildNotification(view: RuntimeNotification.View) =
     RuntimeNotification.build(context, view) { action -> RuntimeService.actionIntent(context, action) }
 
-  private fun currentView(): RuntimeNotification.View? =
-    when (val p = phase) {
-      Phase.Checking -> null
-      is Phase.Setup ->
-        RuntimeNotification.View.Setup(
-          update = p.mode != SetupMode.INSTALL,
-          step = p.step,
-          bytesDone = p.progress?.takeIf { it.unit == "bytes" }?.done,
-          bytesTotal = p.progress?.takeIf { it.unit == "bytes" }?.total,
-        )
-      is Phase.SetupFailed -> RuntimeNotification.View.SetupFailed
-      Phase.Ready ->
-        when {
-          linux.state == "starting" -> RuntimeNotification.View.Starting
-          linux.state == "stopping" -> RuntimeNotification.View.Stopping
-          linux.state != "running" -> null
-          daemon.state.code == "not-responding" -> RuntimeNotification.View.NotResponding(env.serverId)
-          else ->
-            RuntimeNotification.View.Running(
-              serverId = env.serverId,
-              sshEnabled = data.sshEnabled,
-              sshPort = SSH_PORT,
-              keepAwake = data.keepAwake,
-              addresses = env.addresses.map { it.kind to it.address },
-            )
-        }
-    }
-
-  private fun buildSnapshot(): Map<String, Any?> =
-    when (val p = phase) {
-      Phase.Checking -> mapOf("status" to "checking")
-      is Phase.Setup ->
-        mapOf(
-          "status" to "setup",
-          "mode" to modeName(p.mode),
-          "step" to p.step,
-          "progress" to
-            p.progress?.let { mapOf("done" to it.done.toDouble(), "total" to it.total.toDouble(), "unit" to it.unit) },
-          "targetVersion" to BuildConfig.PASEO_DAEMON_VERSION,
-        )
-      is Phase.SetupFailed ->
-        mapOf(
-          "status" to "setup-failed",
-          "mode" to modeName(p.mode),
-          "step" to p.step,
-          "code" to p.code,
-          "message" to p.message,
-          "canStartPrevious" to p.canStartPrevious,
-        )
-      Phase.Ready -> readySnapshot()
-    }
-
-  private fun readySnapshot(): Map<String, Any?> {
-    val exchange = env.exchange
-    val exchangeStatus =
-      when {
-        exchange == null -> mapOf("status" to "no-permission")
-        exchange.status == "mounted" && linux.active && exchangeDir == null -> mapOf("status" to "restart-required")
-        exchange.status == "error" -> mapOf("status" to "error", "message" to (exchange.message ?: ""))
-        else -> mapOf("status" to exchange.status)
-      }
-    val device = env.device
-    return mapOf(
-      "status" to "ready",
-      "linux" to linux.toMap(),
-      "daemon" to
-        daemon.state.toMap() + mapOf("serverId" to env.serverId, "version" to env.daemonVersion, "listen" to LISTEN),
-      "ssh" to
-        mapOf(
-          "enabled" to data.sshEnabled,
-          "port" to SSH_PORT,
-          "state" to (if (data.sshEnabled) sshd.state else STOPPED).toMap(),
-          "hostKeyFingerprints" to env.hostKeys,
-        ),
-      "keepAwake" to data.keepAwake,
-      "distro" to "Debian 13",
-      "addresses" to env.addresses.map { mapOf("kind" to it.kind, "address" to it.address) },
-      "exchange" to
-        exchangeStatus +
-          mapOf(
-            "phonePathLabel" to (exchange?.phonePathLabel ?: ""),
-            "phonePath" to (exchange?.phonePath ?: ExchangeFolder.phoneDir().path),
-            "linuxPath" to ExchangeFolder.LINUX_PATH,
-          ),
-      "device" to
-        mapOf(
-          "batteryOptimized" to (device?.batteryOptimized ?: true),
-          "phantomProcessMonitor" to (device?.phantomProcessMonitor ?: "unknown"),
-          "notificationsAllowed" to (device?.notificationsAllowed ?: false),
-        ),
-    )
-  }
-
-  private fun modeName(mode: SetupMode) = if (mode == SetupMode.INSTALL) "install" else "update"
+  private fun currentView() = StateSnapshot.notificationView(snapshotInput())
 }

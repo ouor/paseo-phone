@@ -22,6 +22,12 @@ if (paseoDaemonVersion == null || nodeLine == null) {
   throw new GradleException("paseo-phone-runtime: missing server version or nodejs in .tool-versions")
 }
 def nodeVersion = nodeLine.split(/\s+/)[1]
+// The Node tarball hash is pinned by hand; a Node bump without its line here fails the build (architecture §3.1).
+def nodeShaLine = file("node-sha256.txt").readLines().collect { it.trim() }.find { !it.startsWith("#") && it.split(/\s+/)[0] == nodeVersion }
+if (nodeShaLine == null || !(nodeShaLine.split(/\s+/).length == 2 && nodeShaLine.split(/\s+/)[1] ==~ /[0-9a-f]{64}/)) {
+  throw new GradleException("paseo-phone-runtime: add '${nodeVersion} <sha256>' for node-v${nodeVersion}-linux-arm64.tar.xz to android/node-sha256.txt")
+}
+def nodeSha256 = nodeShaLine.split(/\s+/)[1]
 
 android {
   namespace "io.github.ouor.paseophone.runtime"
@@ -31,6 +37,14 @@ android {
   defaultConfig {
     buildConfigField "String", "PASEO_DAEMON_VERSION", "\"${paseoDaemonVersion}\""
     buildConfigField "String", "NODE_VERSION", "\"${nodeVersion}\""
+    buildConfigField "String", "NODE_SHA256", "\"${nodeSha256}\""
+  }
+  testOptions {
+    unitTests.all {
+      // StateSnapshotTest compares against the TS fixtures; -PupdateFixtures rewrites them.
+      systemProperty "paseo.fixturesDir", file("../src/__fixtures__").absolutePath
+      systemProperty "paseo.updateFixtures", project.hasProperty("updateFixtures").toString()
+    }
   }
 }
 

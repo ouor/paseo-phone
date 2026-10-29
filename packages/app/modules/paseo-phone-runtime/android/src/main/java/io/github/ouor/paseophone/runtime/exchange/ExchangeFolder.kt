@@ -10,9 +10,8 @@ import android.provider.DocumentsContract
 import android.provider.Settings
 import java.io.File
 
-/** Shared-storage exchange folder bound to `/root/exchange` (architecture §5.2). */
+/** Shared-storage exchange folder bound to PhoneConstants.GUEST_EXCHANGE (architecture §5.2). */
 object ExchangeFolder {
-  const val LINUX_PATH = "/root/exchange"
   private const val NAME = "Paseo"
 
   data class Status(

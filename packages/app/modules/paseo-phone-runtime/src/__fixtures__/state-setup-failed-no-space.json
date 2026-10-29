@@ -1,0 +1,12 @@
+{
+  "status": "setup-failed",
+  "mode": "install",
+  "step": "download",
+  "code": "no-space",
+  "message": "Not enough storage",
+  "space": {
+    "freeBytes": 1000000000,
+    "neededBytes": 4000000000
+  },
+  "canStartPrevious": false
+}

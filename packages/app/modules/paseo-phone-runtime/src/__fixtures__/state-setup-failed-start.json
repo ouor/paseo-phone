@@ -1,0 +1,8 @@
+{
+  "status": "setup-failed",
+  "mode": "update",
+  "step": "start",
+  "code": "command-failed",
+  "message": "Error: listen EADDRINUSE",
+  "canStartPrevious": true
+}

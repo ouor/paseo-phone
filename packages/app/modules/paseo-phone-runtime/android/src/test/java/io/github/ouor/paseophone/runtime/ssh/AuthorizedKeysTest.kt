@@ -41,6 +41,9 @@ class AuthorizedKeysTest {
     assertCode("private-key") { keys.add("-----BEGIN OPENSSH PRIVATE KEY-----\nabc\n-----END OPENSSH PRIVATE KEY-----") }
     assertCode("invalid-key") { keys.add("hello") }
     assertCode("invalid-key") { keys.add("$key a\n$key b") }
+    // Options would let a pasted line run a command or widen access; add() only takes bare keys.
+    assertCode("invalid-key") { keys.add("command=\"/bin/sh\" $key") }
+    assertCode("invalid-key") { keys.add("from=\"10.0.0.1\" $key me") }
     assertEquals(false, File(rootfs, "root/.ssh/authorized_keys").exists())
     rootfs.deleteRecursively()
   }

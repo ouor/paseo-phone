@@ -2,7 +2,10 @@ import Constants from "expo-constants";
 import { requireOptionalNativeModule, type EventSubscription } from "expo-modules-core";
 import type { AuthorizedKey, LogKind, PhoneRuntimeErrorCode, PhoneRuntimeState } from "./src/types";
 
+import { phoneRuntimeStateSchema } from "./src/state-schema";
+
 export type * from "./src/types";
+export { PHONE_NOTIFICATION_QUERY } from "./src/types";
 
 interface PhoneRuntimeNativeModule {
   getState(): PhoneRuntimeState;
@@ -80,9 +83,24 @@ async function call<T>(run: (module: PhoneRuntimeNativeModule) => Promise<T>): P
 
 const CHECKING: PhoneRuntimeState = { status: "checking" };
 
+// Development builds check every native snapshot against the schema; release builds trust it.
+function checked(state: PhoneRuntimeState): PhoneRuntimeState {
+  if (__DEV__) {
+    const result = phoneRuntimeStateSchema.safeParse(state);
+    if (!result.success) {
+      console.error(
+        "[paseo-phone-runtime] native state does not match state-schema.ts",
+        result.error,
+        state,
+      );
+    }
+  }
+  return state;
+}
+
 /** Latest snapshot. Off the phone runtime it stays `checking`; callers gate on `isPhoneRuntime` first. */
 export function getState(): PhoneRuntimeState {
-  return isPhoneRuntime && native ? native.getState() : CHECKING;
+  return isPhoneRuntime && native ? checked(native.getState()) : CHECKING;
 }
 
 export function addStateListener(listener: (state: PhoneRuntimeState) => void): {
@@ -91,7 +109,7 @@ export function addStateListener(listener: (state: PhoneRuntimeState) => void): 
   if (!isPhoneRuntime || !native) {
     return { remove() {} };
   }
-  return native.addListener("onStateChange", (event) => listener(event.state));
+  return native.addListener("onStateChange", (event) => listener(checked(event.state)));
 }
 
 export function start(): Promise<void> {
