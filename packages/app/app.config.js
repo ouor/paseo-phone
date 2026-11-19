@@ -110,7 +110,7 @@ export default {
     name: variant.name,
     slug: "voice-mobile",
     version: nativeReleaseVersion.appVersion,
-    orientation: "portrait",
+    orientation: "default",
     icon: "./assets/images/icon.png",
     scheme: isPhoneBuild ? "paseo-phone" : "paseo", // phone-fork: own deep-link scheme
     userInterfaceStyle: "automatic",
@@ -152,6 +152,7 @@ export default {
       searchPaths: ["../../node_modules", "./node_modules"],
     },
     plugins: [
+      "./modules/paseo-hardware-keyboard/app.plugin",
       "expo-router",
       withPasteInput,
       withAndroidScroll,
