@@ -40,7 +40,7 @@ The app detects both settings and warns you. It does not change them.
 
 ## Install
 
-1. Download `paseo-phone-arm64.apk` from [Releases](https://github.com/ouor/paseo-phone/releases). Tags are `phone-v<upstream version>-<n>`. The latest is `phone-v0.14.0-2` (arm64).
+1. Download `paseo-phone-arm64.apk` from [Releases](https://github.com/ouor/paseo-phone/releases). Tags are `phone-v<upstream version>-<n>`. The latest is `phone-v0.16.2-1` (arm64).
 2. If you have an older build signed with a different key (the early unsigned/debug builds), uninstall it first. Android refuses the update otherwise. Uninstalling deletes the Linux environment, including repos and agent logins under `/root`.
 3. Install the APK. The app is "Paseo Phone" (`io.github.ouor.paseophone`) and installs next to the regular Paseo app.
 
