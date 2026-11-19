@@ -18,7 +18,7 @@
 | `i18n/en.json`, `i18n/ko.json`, `i18n/register.ts`                       | 폰 전용 문구. 기존 i18next 인스턴스에 deep merge                                                                  |
 | `format.ts` (+ `format.test.ts`), `i18n/register.test.ts`                | 순수 문자열 함수와 테스트 (§5 편차 1)                                                                             |
 
-본체 수정은 §4.3 그대로 두 파일: `src/app/_layout.tsx`(import 1 + `<AppShell />`을 `<PhoneRuntimeGate>`로 감쌈), `src/screens/settings/host-page.tsx`(import 1 + `HostAppearanceSection` 다음 한 줄). 두 파일 모두 `phone-fork:` 줄이 2개다.
+본체 수정은 §4.3 그대로 두 파일: `src/app/_layout.tsx`(import 1 + `RuntimeProviders`의 `{children}`, 곧 `AppShell`을 `<PhoneRuntimeGate>`로 감쌈), `src/screens/settings/host-page.tsx`(import 1 + `HostAppearanceSection` 다음 한 줄). 두 파일 모두 `phone-fork:` 줄이 2개다.
 
 라운드 3(1차 리뷰 수정, [fix-plan.md](../code-reviews/fix-plan.md) U1–U11): 전부 반영. 코어가 아직 커밋하지 않은 `index.ts`/`types.ts`/`state-schema.ts`(작업 트리)의 `space`, `cancelled`, `PHONE_NOTIFICATION_QUERY`, 숫자 `port`에 맞춰 typecheck했다.
 

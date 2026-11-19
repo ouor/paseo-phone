@@ -295,11 +295,11 @@ proot-distro 5.10.3의 `login` 인자와 같게 만든다.
 
 포크가 업스트림 파일에 넣은 줄에는 모두 `phone-fork:` 주석을 단다(레포의 `COMPAT(` 관례와 같은 방식). 머지 후 `rg -n "phone-fork:" packages/app scripts` 결과가 아래 표의 수와 같아야 한다.
 
-| 파일                                              | 수정                                                                                                                               | `phone-fork:` 줄 |
-| ------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- | ---------------- |
-| `packages/app/app.config.js`                      | `variants.phone`, phone일 때 `scheme: "paseo-phone"`, `useLegacyPackaging: true`, `allowBackup: false`, `extra.phoneRuntime: true` | 6                |
-| `packages/app/src/app/_layout.tsx`                | `<AppShell />`을 `<PhoneRuntimeGate>`로 감쌈 (import + JSX)                                                                        | 2                |
-| `packages/app/src/screens/settings/host-page.tsx` | `<PhoneHostSections serverId={serverId} />` (import + JSX)                                                                         | 2                |
+| 파일                                              | 수정                                                                                                                                                    | `phone-fork:` 줄 |
+| ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------- |
+| `packages/app/app.config.js`                      | `variants.phone`, phone일 때 `scheme: "paseo-phone"`, `useLegacyPackaging: true`, `allowBackup: false`, `extra.phoneRuntime: true`                      | 6                |
+| `packages/app/src/app/_layout.tsx`                | `RuntimeProviders`의 `{children}`(= `AppShell`)을 `<PhoneRuntimeGate>`로 감쌈 (import + JSX). 루트 JSX 깊이 한도(6) 때문에 루트 트리가 아니라 여기 둔다 | 2                |
+| `packages/app/src/screens/settings/host-page.tsx` | `<PhoneHostSections serverId={serverId} />` (import + JSX)                                                                                              | 2                |
 
 비-phone 변형도 모듈을 자동 링크한다(권한·`.so` 포함). 이 포크는 phone 변형만 빌드하고, 네이티브 초기화가 패키지 이름으로, JS가 `extra.phoneRuntime`으로 막으므로 수용한다(§6).
 

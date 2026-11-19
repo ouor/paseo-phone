@@ -979,7 +979,10 @@ function RuntimeProviders({ children }: { children: ReactNode }) {
     <HostRuntimeBootstrapProvider>
       <NotificationOpenBridge />
       <SidebarCalloutProvider>
-        <ProvidersWrapper>{children}</ProvidersWrapper>
+        <ProvidersWrapper>
+          {/* phone-fork: holds AppShell (children) while Linux installs or starts (src/phone/runtime-gate) */}
+          <PhoneRuntimeGate>{children}</PhoneRuntimeGate>
+        </ProvidersWrapper>
       </SidebarCalloutProvider>
     </HostRuntimeBootstrapProvider>
   );
@@ -1028,10 +1031,7 @@ function RootAppTree() {
           <AddHostProvider>
             <RootProviders>
               <RuntimeProviders>
-                {/* phone-fork: holds AppShell while Linux installs or starts (src/phone/runtime-gate) */}
-                <PhoneRuntimeGate>
-                  <AppShell />
-                </PhoneRuntimeGate>
+                <AppShell />
               </RuntimeProviders>
             </RootProviders>
           </AddHostProvider>
